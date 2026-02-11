@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String?  // hashed; for Credentials provider
+  credits   Int      @default(10)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  brands    Brand[]
+  assets    Asset[]
+}
+
+model Brand {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  siteUrl     String
+  name        String
+  description String?
+  tagline     String?
+  colors      String   // JSON array of hex strings
+  image       String?
+  domain      String
+  fonts       String?  // JSON array
+  logos       String?  // JSON array
+  personality String?
+  tone        String?
+  createdAt   DateTime @default(now())
+  assets      Asset[]
+}
+
+model Asset {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brandId   String?
+  brand     Brand?   @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  url       String
+  label     String
+  type      String   // social | ad | thumbnail | banner
+  width     Int
+  height    Int
+  prompt    String?
+  createdAt DateTime @default(now())
+}
