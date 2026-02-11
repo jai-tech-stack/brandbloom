@@ -14,9 +14,12 @@ const EXTRACTION_STEPS = [
 ];
 
 const IDEA_CARDS = [
-  { title: "Blog Header", prompt: "Blog header image", icon: "📄" },
-  { title: "Social Post", prompt: "Social media post", icon: "📱" },
-  { title: "Merchandise", prompt: "Merchandise design", icon: "👕" },
+  { title: "Blog Header", prompt: "Professional blog header image with clean typography", icon: "📄" },
+  { title: "Social Post", prompt: "Eye-catching social media post, modern design", icon: "📱" },
+  { title: "Merchandise", prompt: "Premium merchandise design, t-shirt or hoodie mockup", icon: "👕" },
+  { title: "Banner Ad", prompt: "Professional banner advertisement, compelling visuals", icon: "🎯" },
+  { title: "Product Shot", prompt: "Elegant product photography, studio lighting", icon: "📸" },
+  { title: "Story Cover", prompt: "Instagram story cover, vertical format, engaging", icon: "📖" },
 ];
 
 const CURATED_AESTHETICS = [
