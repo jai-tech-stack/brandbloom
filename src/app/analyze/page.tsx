@@ -48,6 +48,21 @@ const CURATED_AESTHETICS = [
     title: "Vintage & Retro",
     prompt: "Vintage retro style, warm tones, film grain, nostalgic, classic design elements, timeless aesthetic",
   },
+  {
+    id: "tech",
+    title: "Tech & Futuristic",
+    prompt: "Futuristic tech design, neon accents, cyber aesthetic, modern technology, sleek and innovative",
+  },
+  {
+    id: "nature",
+    title: "Organic & Natural",
+    prompt: "Organic natural aesthetic, earth tones, sustainable feel, botanical elements, eco-friendly vibe",
+  },
+  {
+    id: "luxury",
+    title: "Luxury & Premium",
+    prompt: "Luxury premium aesthetic, gold accents, rich textures, high-end materials, sophisticated elegance",
+  },
 ];
 
 const ASPECT_RATIO_OPTIONS = [
