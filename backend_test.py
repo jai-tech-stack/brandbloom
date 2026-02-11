@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 class BrandAssetAPITester:
-    def __init__(self, base_url="https://e6d1ee28-b5af-4ed3-96e4-f53efcca7dec.preview.emergentagent.com"):
+    def __init__(self, base_url="http://localhost:3000"):
         self.base_url = base_url
         self.session = requests.Session()
         self.tests_run = 0
