@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { buildImagePrompt, generateImageWithReplicate } from "@/lib/ai-generator";
+import { buildImagePrompt, generateImageWithGemini } from "@/lib/gemini-image-generator";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -20,14 +20,14 @@ type BrandInput = {
 };
 
 const ASSET_PROMPTS = [
-  { label: "Instagram post", type: "social" as const, width: 1024, height: 1024, aspect_ratio: "1:1", prompt: "Professional brand social media post, square format, modern, clean, high quality" },
-  { label: "Open Graph", type: "social" as const, width: 1344, height: 768, aspect_ratio: "16:9", prompt: "Professional brand image for website link preview, wide format, modern, clean" },
-  { label: "Ad creative", type: "ad" as const, width: 1152, height: 896, aspect_ratio: "4:3", prompt: "Professional ad creative, brand style, modern, high quality marketing image" },
-  { label: "Video thumbnail", type: "thumbnail" as const, width: 1344, height: 768, aspect_ratio: "16:9", prompt: "Engaging video thumbnail, professional, modern, eye-catching" },
+  { label: "Instagram post", type: "social" as const, width: 1024, height: 1024, aspect_ratio: "1:1", prompt: "Professional brand social media post, square format, modern, clean, high quality, visually appealing" },
+  { label: "Open Graph", type: "social" as const, width: 1344, height: 768, aspect_ratio: "16:9", prompt: "Professional brand image for website link preview, wide format, modern, clean, eye-catching" },
+  { label: "Ad creative", type: "ad" as const, width: 1152, height: 896, aspect_ratio: "4:3", prompt: "Professional ad creative, brand style, modern, high quality marketing image, compelling visuals" },
+  { label: "Video thumbnail", type: "thumbnail" as const, width: 1344, height: 768, aspect_ratio: "16:9", prompt: "Engaging video thumbnail, professional, modern, eye-catching, high contrast" },
 ];
 
 /**
- * Asset generation API (Bloom-like).
+ * Asset generation API using Gemini Nano Banana
  * When logged in: checks credits, decrements per image, saves Asset(s). Returns credits in response.
  * When not logged in: no credits check; demo/real images only (no persistence).
  */
@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
       userId = user?.id ?? null;
     }
 
-    const apiToken = (process.env.REPLICATE_API_TOKEN ?? process.env.REPLICATE_API_KEY ?? "").trim();
+    // Get Emergent LLM Key for Gemini
+    const emergentKey = (process.env.EMERGENT_LLM_KEY ?? "").trim();
     const brandData = brand && (brand.name || (brand.colors && brand.colors.length)) ? brand : null;
 
     const limit = Math.min(4, Math.max(1, Number(limitParam) || 2));
@@ -80,22 +81,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (apiToken) {
+    // Try Gemini Nano Banana first
+    if (emergentKey) {
       const assets: GeneratedAsset[] = [];
       for (let i = 0; i < specsToRun.length; i++) {
         const spec = specsToRun[i];
         try {
           const fullPrompt = buildImagePrompt(spec.prompt, brandData);
-          const imageUrl = await generateImageWithReplicate(
-            apiToken,
-            fullPrompt,
-            spec.aspect_ratio
-          );
-          if (imageUrl) {
+          const sessionId = `brandbloom-${Date.now()}-${i}`;
+          const result = await generateImageWithGemini(emergentKey, fullPrompt, sessionId);
+          
+          if (result) {
             const id = String(i + 1);
             assets.push({
               id,
-              url: imageUrl,
+              url: result.url,
               label: spec.label,
               type: spec.type,
               width: spec.width,
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
                 data: {
                   userId,
                   brandId: brandId || null,
-                  url: imageUrl,
+                  url: result.url.substring(0, 500), // Truncate for DB storage
                   label: spec.label,
                   type: spec.type,
                   width: spec.width,
@@ -117,30 +117,27 @@ export async function POST(request: NextRequest) {
             }
           }
         } catch (err) {
-          console.error(`Replicate asset ${spec.label} failed:`, err);
+          console.error(`Gemini asset ${spec.label} failed:`, err);
         }
       }
-      if (assets.length > 0 && userId) {
-        await prisma.user.update({
-          where: { id: userId },
-          data: { credits: { decrement: assets.length } },
-        });
-        const updated = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { credits: true },
-        });
-        const res = NextResponse.json({ assets, credits: updated?.credits ?? 0 });
-        res.headers.set("X-Replicate-Token-Set", "true");
-        return res;
-      }
+      
       if (assets.length > 0) {
-        const res = NextResponse.json({ assets });
-        res.headers.set("X-Replicate-Token-Set", "true");
-        return res;
+        if (userId) {
+          await prisma.user.update({
+            where: { id: userId },
+            data: { credits: { decrement: assets.length } },
+          });
+          const updated = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { credits: true },
+          });
+          return NextResponse.json({ assets, credits: updated?.credits ?? 0 });
+        }
+        return NextResponse.json({ assets });
       }
     }
 
-    // Demo mode
+    // Demo mode fallback
     const demoSpecs = useCustomPrompt
       ? [{ label: "Custom", type: "social" as const, width: 1024, height: 1024 }]
       : ASSET_PROMPTS.slice(0, Math.min(4, Math.max(1, Number(limitParam) || 2)));
@@ -154,6 +151,7 @@ export async function POST(request: NextRequest) {
       width: spec.width,
       height: spec.height,
     }));
+    
     if (userId && demoAssets.length > 0) {
       for (const a of demoAssets) {
         await prisma.asset.create({
@@ -176,13 +174,9 @@ export async function POST(request: NextRequest) {
         where: { id: userId },
         select: { credits: true },
       });
-      const res = NextResponse.json({ assets: demoAssets, demo: true, credits: updated?.credits ?? 0 });
-      res.headers.set("X-Replicate-Token-Set", "false");
-      return res;
+      return NextResponse.json({ assets: demoAssets, demo: true, credits: updated?.credits ?? 0 });
     }
-    const res = NextResponse.json({ assets: demoAssets, demo: true });
-    res.headers.set("X-Replicate-Token-Set", "false");
-    return res;
+    return NextResponse.json({ assets: demoAssets, demo: true });
   } catch (e) {
     console.error("generate-assets error:", e);
     return NextResponse.json(
