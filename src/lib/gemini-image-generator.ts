@@ -1,9 +1,7 @@
 /**
  * Gemini Nano Banana Image Generator
- * Uses emergentintegrations for AI image generation
+ * Uses emergentintegrations for AI image generation via Emergent API
  */
-
-const EMERGENT_API_URL = "https://integrations.emergentagent.com/api/llm/chat/multimodal";
 
 export type BrandContext = {
   name?: string;
@@ -20,29 +18,34 @@ export function buildImagePrompt(basePrompt: string, brand: BrandContext | null)
   if (brand?.colors?.length) parts.push(`Use these brand colors: ${brand.colors.slice(0, 3).join(", ")}.`);
   if (brand?.description) parts.push(`Context: ${brand.description.slice(0, 120)}.`);
   parts.push(basePrompt);
-  parts.push("High quality, professional, modern design.");
+  parts.push("High quality, professional, modern design, 4K resolution.");
   return parts.join(" ");
 }
 
 /**
- * Generate an image using Gemini Nano Banana via Emergent API
+ * Generate an image using Gemini Nano Banana via Emergent Integration Proxy
  */
 export async function generateImageWithGemini(
   apiKey: string,
   prompt: string,
   sessionId: string = "brandbloom-" + Date.now()
 ): Promise<{ url: string; base64?: string } | null> {
+  // Use the integration proxy URL for server-side calls
+  const INTEGRATION_PROXY_URL = process.env.INTEGRATION_PROXY_URL || "https://integrations.emergentagent.com";
+  
   try {
-    const response = await fetch(EMERGENT_API_URL, {
+    console.log("[Gemini] Starting image generation...");
+    console.log("[Gemini] Prompt:", prompt.substring(0, 100) + "...");
+    
+    const response = await fetch(`${INTEGRATION_PROXY_URL}/api/llm/chat/multimodal`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         api_key: apiKey,
         session_id: sessionId,
-        system_message: "You are an AI image generator. Generate high-quality brand images based on the given prompt.",
+        system_message: "You are an expert brand designer. Create stunning, professional brand imagery based on the prompt. Always generate a visually appealing image.",
         provider: "gemini",
         model: "gemini-3-pro-image-preview",
         params: {
@@ -55,12 +58,12 @@ export async function generateImageWithGemini(
           }
         ]
       }),
-      signal: AbortSignal.timeout(120000), // 2 minute timeout for image generation
+      signal: AbortSignal.timeout(180000), // 3 minute timeout for image generation
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Gemini API error:", response.status, errorText);
+      console.error("[Gemini] API error:", response.status, errorText);
       return null;
     }
 
@@ -70,56 +73,26 @@ export async function generateImageWithGemini(
       error?: string;
     };
 
+    console.log("[Gemini] Response received, images:", data.images?.length || 0);
+
     if (data.error) {
-      console.error("Gemini API returned error:", data.error);
+      console.error("[Gemini] API returned error:", data.error);
       return null;
     }
 
     // Check for images in response
     if (data.images && data.images.length > 0) {
       const imageData = data.images[0];
-      // Return as data URL
+      // Return as data URL for immediate display
       const dataUrl = `data:${imageData.mime_type};base64,${imageData.data}`;
+      console.log("[Gemini] Image generated successfully!");
       return { url: dataUrl, base64: imageData.data };
     }
 
-    console.log("No images in Gemini response");
+    console.log("[Gemini] No images in response");
     return null;
   } catch (error) {
-    console.error("Gemini image generation error:", error);
+    console.error("[Gemini] Image generation error:", error);
     return null;
   }
-}
-
-/**
- * Generate multiple images with Gemini
- */
-export async function generateMultipleImages(
-  apiKey: string,
-  prompts: Array<{ prompt: string; label: string; width: number; height: number; type: string }>,
-): Promise<Array<{ id: string; url: string; label: string; type: string; width: number; height: number }>> {
-  const results: Array<{ id: string; url: string; label: string; type: string; width: number; height: number }> = [];
-  
-  for (let i = 0; i < prompts.length; i++) {
-    const spec = prompts[i];
-    const sessionId = `brandbloom-${Date.now()}-${i}`;
-    
-    try {
-      const result = await generateImageWithGemini(apiKey, spec.prompt, sessionId);
-      if (result) {
-        results.push({
-          id: String(i + 1),
-          url: result.url,
-          label: spec.label,
-          type: spec.type,
-          width: spec.width,
-          height: spec.height,
-        });
-      }
-    } catch (error) {
-      console.error(`Failed to generate image ${i + 1}:`, error);
-    }
-  }
-  
-  return results;
 }
