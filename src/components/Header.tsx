@@ -30,6 +30,7 @@ export function Header() {
     { href: "#how-it-works", label: "How it works" },
     { href: "#pricing", label: "Pricing" },
     { href: "#faq", label: "FAQ" },
+    { href: "/dashboard", label: "Dashboard" },
   ];
 
   const navContent = (
