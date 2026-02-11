@@ -393,17 +393,18 @@ function AnalyzeContent() {
               </button>
             </div>
             <p className="mb-4 text-sm text-stone-500">Some ideas to get started</p>
-            <div className="mb-8 grid gap-4 sm:grid-cols-3">
+            <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {IDEA_CARDS.map((card) => (
                 <button
                   key={card.title}
                   type="button"
                   onClick={() => handleCreate(`${brand?.name ?? "Brand"}: ${card.prompt}`)}
                   disabled={generating}
-                  className="rounded-xl border border-surface-600 bg-surface-800/50 p-4 text-left transition hover:border-brand-500/50 disabled:opacity-60"
+                  className="rounded-xl border border-surface-600 bg-surface-800/50 p-4 text-left transition hover:border-brand-500/50 hover:bg-surface-700/50 disabled:opacity-60"
                 >
                   <span className="text-2xl">{card.icon}</span>
-                  <p className="mt-2 font-medium text-white">{brand?.name ?? "Brand"}: {card.title}</p>
+                  <p className="mt-2 font-medium text-white">{card.title}</p>
+                  <p className="mt-1 text-xs text-stone-500">{brand?.name ?? "Brand"}</p>
                 </button>
               ))}
             </div>
