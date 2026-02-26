@@ -17,8 +17,9 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    const d = (err as { detail?: string }).detail;
-    throw new Error(typeof d === "string" ? d : Array.isArray(d) ? d.join(", ") : res.statusText || "Request failed");
+    const d = (err as { detail?: string | string[] }).detail;
+    const msg = typeof d === "string" ? d : Array.isArray(d) ? d.join(", ") : res.statusText || "Request failed";
+    throw new Error(msg);
   }
   return res.json();
 }
