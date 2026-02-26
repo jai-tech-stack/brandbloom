@@ -2,7 +2,53 @@
 
 Your app is **one Next.js codebase**: API routes are the backend, so you deploy once and get both frontend and backend live.
 
-**Already done in this repo:** Prisma is set to PostgreSQL and `vercel.json` is configured. You only need to create the database and deploy.
+**Already done:** Code is on GitHub ([jai-tech-stack/brandbloom](https://github.com/jai-tech-stack/brandbloom)), branch **release/live**. Prisma is PostgreSQL, `vercel.json` is set.
+
+---
+
+## Deploy to Vercel (you do this once)
+
+1. **Open this link** (imports this repo into Vercel):  
+   **[Deploy BrandBloom to Vercel](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjai-tech-stack%2Fbrandbloom&project-name=brandbloom&repository-name=brandbloom)**
+
+2. When Vercel asks which branch to use, select **release/live**.
+
+3. Before clicking Deploy, add **Environment Variables** (click "Environment Variables" and add these):
+
+   | Name | Value |
+   |------|--------|
+   | `DATABASE_URL` | Your Neon Postgres URL (from `npx neonctl@latest init` or [neon.tech](https://neon.tech) dashboard) |
+   | `NEXTAUTH_SECRET` | Any long random string (e.g. run `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` and paste) |
+   | `NEXTAUTH_URL` | Leave empty on first deploy; after deploy set it to `https://your-project.vercel.app` and redeploy |
+
+4. Click **Deploy**. When it finishes, set `NEXTAUTH_URL` to the live URL and redeploy once.
+
+That’s it — frontend and API are live.
+
+---
+
+## Create a new branch on GitHub and push code (already done)
+
+1. **Create a new repository on GitHub**
+   - Go to [github.com/new](https://github.com/new).
+   - Repository name: e.g. `brandbloom`.
+   - Choose **Public**. Do **not** add a README, .gitignore, or license (you already have them).
+   - Create repository.
+
+2. **Connect your local repo and push**
+   - GitHub will show a URL like `https://github.com/YOUR_USERNAME/brandbloom.git`. Run these in your project folder (replace the URL with yours):
+
+   ```bash
+   git remote add origin https://github.com/YOUR_USERNAME/brandbloom.git
+   git push -u origin release/live
+   ```
+
+   - If you use SSH: `git remote add origin git@github.com:YOUR_USERNAME/brandbloom.git` then the same `git push -u origin release/live`.
+
+3. **Result**
+   - Branch `release/live` is on GitHub. You can connect Vercel to this repo and set the production branch to `release/live`.
+
+---
 
 ## Option 1: Vercel (app) + Neon (database) — recommended
 
