@@ -1,14 +1,14 @@
 import NextAuth from "next-auth";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 
 const nextAuthHandler = NextAuth(authOptions);
 
 type RouteContext = { params: Promise<{ nextauth: string[] }> };
 
-async function withJsonError(req: Request, context: RouteContext, method: "GET" | "POST") {
+async function withJsonError(req: NextRequest, context: RouteContext, method: "GET" | "POST") {
   try {
-    return await nextAuthHandler(req, context as never);
+    return await nextAuthHandler(req as never, context as never);
   } catch (e) {
     console.error("[next-auth]", method, "error:", e);
     return NextResponse.json(
@@ -18,10 +18,16 @@ async function withJsonError(req: Request, context: RouteContext, method: "GET" 
   }
 }
 
-export async function GET(req: Request, context: RouteContext) {
-  return withJsonError(req, context, "GET");
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ nextauth: string[] }> }
+): Promise<Response> {
+  return withJsonError(request, context, "GET");
 }
 
-export async function POST(req: Request, context: RouteContext) {
-  return withJsonError(req, context, "POST");
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ nextauth: string[] }> }
+): Promise<Response> {
+  return withJsonError(request, context, "POST");
 }
