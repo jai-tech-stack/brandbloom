@@ -13,17 +13,11 @@ async function safeJson<T = Record<string, unknown>>(res: Response): Promise<T> 
   if (!text.trim()) return {} as T;
   const ct = res.headers.get("content-type") ?? "";
   if (!ct.includes("application/json")) {
-    // #region agent log
-    if (typeof fetch !== "undefined") fetch("http://127.0.0.1:7926/ingest/90767cbc-7ef4-42c1-8d35-81a50ac82a6f", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd0430" }, body: JSON.stringify({ sessionId: "dd0430", runId: "run1", hypothesisId: "D", location: "analyze/page.tsx:safeJson", message: "safeJson non-JSON content-type", data: { url: res?.url ?? "" }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
     return { error: "Server returned an invalid response. Please try again." } as T;
   }
   try {
     return JSON.parse(text) as T;
   } catch {
-    // #region agent log
-    if (typeof fetch !== "undefined") fetch("http://127.0.0.1:7926/ingest/90767cbc-7ef4-42c1-8d35-81a50ac82a6f", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd0430" }, body: JSON.stringify({ sessionId: "dd0430", runId: "run1", hypothesisId: "D", location: "analyze/page.tsx:safeJson", message: "safeJson fallback (non-JSON or parse error)", data: { url: typeof res?.url === "string" ? res.url : "" }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
     return { error: "Invalid response from server. Please try again." } as T;
   }
 }
@@ -570,8 +564,9 @@ function AnalyzeContent() {
         return;
       }
       if (!res.ok) throw new Error((data as { error?: string }).error ?? "Generation failed");
-      setAssets(data.assets ?? []);
-      if (data.assets?.[0]?.id) setSelectedAssetId(data.assets[0].id);
+      setAssets((data.assets ?? []) as GeneratedAsset[]);
+      const firstAsset = data.assets?.[0] as GeneratedAsset | undefined;
+      if (firstAsset?.id) setSelectedAssetId(firstAsset.id);
       setEditorPrompt(prompt);
       setDemoMode(!!data.demo);
       setReplicateAttempted(!!(data as { replicateAttempted?: boolean }).replicateAttempted);
@@ -1573,7 +1568,7 @@ function AnalyzeContent() {
       });
     }
 
-    const selectedAsset = assets.find((a) => a.id === selectedAssetId) ?? assets[0];
+    const selectedAsset = (assets ?? []).find((a) => a.id === selectedAssetId) ?? (assets ?? [])[0];
 
     return (
       <main className="min-h-screen">

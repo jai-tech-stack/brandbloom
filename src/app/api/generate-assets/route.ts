@@ -104,9 +104,6 @@ function toOrchestratorBrand(b: BrandInput | null): OrchestratorBrand | null {
  * Body: url (optional if brandId set), brand (optional), brandId, ideaType, promptOverride, aspectRatio, limit.
  */
 export async function POST(request: NextRequest) {
-  // #region agent log
-  fetch("http://127.0.0.1:7926/ingest/90767cbc-7ef4-42c1-8d35-81a50ac82a6f", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd0430" }, body: JSON.stringify({ sessionId: "dd0430", runId: "run1", hypothesisId: "C", location: "generate-assets/route.ts:POST", message: "generate-assets entry", data: {}, timestamp: Date.now() }) }).catch(() => {});
-  // #endregion
   try {
     const body = await request.json();
     const {
@@ -442,9 +439,6 @@ export async function POST(request: NextRequest) {
     }];
     return NextResponse.json({ assets: demoAssets, demo: true });
   } catch (e) {
-    // #region agent log
-    fetch("http://127.0.0.1:7926/ingest/90767cbc-7ef4-42c1-8d35-81a50ac82a6f", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd0430" }, body: JSON.stringify({ sessionId: "dd0430", runId: "run1", hypothesisId: "C", location: "generate-assets/route.ts catch", message: "generate-assets error", data: { error: String(e), name: (e as Error)?.name }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
     console.error("generate-assets error:", e);
     return NextResponse.json({ error: "Asset generation failed" }, { status: 500 });
   }

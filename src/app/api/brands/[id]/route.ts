@@ -41,9 +41,6 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    // #region agent log
-    fetch("http://127.0.0.1:7926/ingest/90767cbc-7ef4-42c1-8d35-81a50ac82a6f", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd0430" }, body: JSON.stringify({ sessionId: "dd0430", runId: "run1", hypothesisId: "A", location: "brands/[id]/route.ts:GET", message: "brands GET entry", data: { id }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
     const user = await resolveAuthUser(request);
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -83,9 +80,6 @@ export async function GET(
 
     return NextResponse.json({ brand: parsedBrand });
   } catch (e) {
-    // #region agent log
-    fetch("http://127.0.0.1:7926/ingest/90767cbc-7ef4-42c1-8d35-81a50ac82a6f", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd0430" }, body: JSON.stringify({ sessionId: "dd0430", runId: "run1", hypothesisId: "A", location: "brands/[id]/route.ts:GET catch", message: "brands GET error", data: { error: String(e), name: (e as Error)?.name }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
     console.error("brand GET error:", e);
     return NextResponse.json({ error: "Failed to fetch brand" }, { status: 500 });
   }

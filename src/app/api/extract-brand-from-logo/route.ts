@@ -28,9 +28,6 @@ function toHex(color: string): string {
 }
 
 export async function POST(request: NextRequest) {
-  // #region agent log
-  fetch("http://127.0.0.1:7926/ingest/90767cbc-7ef4-42c1-8d35-81a50ac82a6f", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd0430" }, body: JSON.stringify({ sessionId: "dd0430", runId: "run1", hypothesisId: "B", location: "extract-brand-from-logo/route.ts:POST", message: "extract-brand-from-logo entry", data: {}, timestamp: Date.now() }) }).catch(() => {});
-  // #endregion
   try {
     const authUser = await resolveAuthUser(request);
     if (!authUser) {
@@ -120,9 +117,6 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (e) {
-    // #region agent log
-    fetch("http://127.0.0.1:7926/ingest/90767cbc-7ef4-42c1-8d35-81a50ac82a6f", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd0430" }, body: JSON.stringify({ sessionId: "dd0430", runId: "run1", hypothesisId: "B", location: "extract-brand-from-logo/route.ts catch", message: "extract-brand-from-logo error", data: { error: String(e), name: (e as Error)?.name }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
     console.error("extract-brand-from-logo error:", e);
     if (e instanceof OpenAIKeyRequiredError) {
       return NextResponse.json(
