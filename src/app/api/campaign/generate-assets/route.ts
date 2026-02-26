@@ -98,7 +98,13 @@ export async function POST(request: NextRequest) {
       data: { status: "generating" },
     });
 
-    const brandRow = campaign.brand as Parameters<typeof brandRowToIntelligence>[0] & { logos?: string | null; strategyProfile?: string | null };
+    // FIX: added `id: string` to the intersection type so brandRow.id is accessible
+    const brandRow = campaign.brand as Parameters<typeof brandRowToIntelligence>[0] & {
+      id: string;
+      logos?: string | null;
+      strategyProfile?: string | null;
+    };
+
     const orchestratorBrand = toOrchestratorBrand(brandRow);
     let logoUrl: string | null = null;
     try {

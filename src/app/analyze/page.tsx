@@ -1,4 +1,4 @@
-"use client";
+ "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
@@ -13,11 +13,17 @@ async function safeJson<T = Record<string, unknown>>(res: Response): Promise<T> 
   if (!text.trim()) return {} as T;
   const ct = res.headers.get("content-type") ?? "";
   if (!ct.includes("application/json")) {
+    // #region agent log
+    if (typeof fetch !== "undefined") fetch("http://127.0.0.1:7926/ingest/90767cbc-7ef4-42c1-8d35-81a50ac82a6f", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd0430" }, body: JSON.stringify({ sessionId: "dd0430", runId: "run1", hypothesisId: "D", location: "analyze/page.tsx:safeJson", message: "safeJson non-JSON content-type", data: { url: res?.url ?? "" }, timestamp: Date.now() }) }).catch(() => {});
+    // #endregion
     return { error: "Server returned an invalid response. Please try again." } as T;
   }
   try {
     return JSON.parse(text) as T;
   } catch {
+    // #region agent log
+    if (typeof fetch !== "undefined") fetch("http://127.0.0.1:7926/ingest/90767cbc-7ef4-42c1-8d35-81a50ac82a6f", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd0430" }, body: JSON.stringify({ sessionId: "dd0430", runId: "run1", hypothesisId: "D", location: "analyze/page.tsx:safeJson", message: "safeJson fallback (non-JSON or parse error)", data: { url: typeof res?.url === "string" ? res.url : "" }, timestamp: Date.now() }) }).catch(() => {});
+    // #endregion
     return { error: "Invalid response from server. Please try again." } as T;
   }
 }
@@ -563,10 +569,10 @@ function AnalyzeContent() {
         router.replace(`/login?callbackUrl=${encodeURIComponent(`/analyze?url=${encodeURIComponent(url)}`)}`);
         return;
       }
-      if (!res.ok) throw new Error((data as { error?: string }).error ?? "Generation failed");
+      if (!res.ok) throw new Error(data.error ?? "Generation failed");
+      // FIX 1: cast assets to GeneratedAsset[]
       setAssets((data.assets ?? []) as GeneratedAsset[]);
-      const firstAsset = data.assets?.[0] as GeneratedAsset | undefined;
-      if (firstAsset?.id) setSelectedAssetId(firstAsset.id);
+      if (data.assets?.[0]?.id) setSelectedAssetId(data.assets[0].id);
       setEditorPrompt(prompt);
       setDemoMode(!!data.demo);
       setReplicateAttempted(!!(data as { replicateAttempted?: boolean }).replicateAttempted);
@@ -614,7 +620,7 @@ function AnalyzeContent() {
         window.dispatchEvent(new CustomEvent("credits-updated", { detail: data.credits }));
       }
       if (data.url) {
-        const uploadedAsset = {
+        const uploadedAsset: GeneratedAsset = {
           id: "1",
           url: data.url,
           label: data.label || "Uploaded (branded)",
@@ -680,7 +686,8 @@ function AnalyzeContent() {
       }
       if (!res.ok) throw new Error(data.error ?? "Resize failed");
       if (data.assets?.length) {
-        const newAsset: GeneratedAsset = { ...data.assets[0], id: String((assets ?? []).length + 1), label: platformLabel };
+        // FIX 2: cast spread to GeneratedAsset
+        const newAsset: GeneratedAsset = { ...(data.assets[0] as GeneratedAsset), id: String((assets?.length ?? 0) + 1), label: platformLabel };
         setAssets((prev) => [...(prev ?? []), newAsset]);
         setSelectedAssetId(newAsset.id);
       }
@@ -732,7 +739,8 @@ function AnalyzeContent() {
       }
       if (!res.ok) throw new Error(data.error ?? "Variation failed");
       if (data.assets?.length) {
-        const newAsset: GeneratedAsset = { ...data.assets[0], id: String((assets ?? []).length + 1), label: "Variation" };
+        // FIX 3: cast spread to GeneratedAsset
+        const newAsset: GeneratedAsset = { ...(data.assets[0] as GeneratedAsset), id: String((assets?.length ?? 0) + 1), label: "Variation" };
         setAssets((prev) => [...(prev ?? []), newAsset]);
         setSelectedAssetId(newAsset.id);
       }
@@ -908,7 +916,7 @@ function AnalyzeContent() {
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-bold text-white">Your brand kit</h1>
-              <p className="mt-1 text-sm text-stone-400">We’ve captured your brand identity. Review below, then start creating assets.</p>
+              <p className="mt-1 text-sm text-stone-400">We've captured your brand identity. Review below, then start creating assets.</p>
             </div>
             <div className="flex flex-wrap gap-3">
               <button
@@ -1563,12 +1571,12 @@ function AnalyzeContent() {
     }
 
     function downloadAllAssets() {
-      (assets ?? []).forEach((asset, index) => {
+      assets!.forEach((asset, index) => {
         setTimeout(() => downloadAsset(asset), index * 500);
       });
     }
 
-    const selectedAsset = (assets ?? []).find((a) => a.id === selectedAssetId) ?? (assets ?? [])[0];
+    const selectedAsset = assets.find((a) => a.id === selectedAssetId) ?? assets[0];
 
     return (
       <main className="min-h-screen">
@@ -1576,9 +1584,9 @@ function AnalyzeContent() {
         <div className="mx-auto max-w-5xl px-4 pt-24 pb-24">
           {demoMode && (
             <div className="mb-6 rounded-xl border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-              <p className="font-medium text-amber-100">You’re seeing placeholder images.</p>
+              <p className="font-medium text-amber-100">You're seeing placeholder images.</p>
               {replicateAttempted ? (
-                <p className="mt-1 text-amber-200/90">Replicate was called but didn’t return an image. Set up <strong>billing</strong> at <a href="https://replicate.com/account/billing" target="_blank" rel="noreferrer" className="underline">replicate.com/account/billing</a> and <strong>REPLICATE_API_TOKEN</strong> at <a href="https://replicate.com/account/api-tokens" target="_blank" rel="noreferrer" className="underline">replicate.com/account/api-tokens</a>. <Link href="/setup#images" className="underline hover:text-amber-100">Image setup &amp; billing →</Link></p>
+                <p className="mt-1 text-amber-200/90">Replicate was called but didn't return an image. Set up <strong>billing</strong> at <a href="https://replicate.com/account/billing" target="_blank" rel="noreferrer" className="underline">replicate.com/account/billing</a> and <strong>REPLICATE_API_TOKEN</strong> at <a href="https://replicate.com/account/api-tokens" target="_blank" rel="noreferrer" className="underline">replicate.com/account/api-tokens</a>. <Link href="/setup#images" className="underline hover:text-amber-100">Image setup &amp; billing →</Link></p>
               ) : (
                 <p className="mt-1 text-amber-200/90">Put <strong>REPLICATE_API_TOKEN</strong> in the <strong>root</strong> <code className="rounded bg-amber-500/20 px-1">.env</code> (same folder as <code className="rounded bg-amber-500/20 px-1">package.json</code>), not in <code className="rounded bg-amber-500/20 px-1">backend/.env</code>. Then stop the dev server (Ctrl+C) and run <code className="rounded bg-amber-500/20 px-1">npm run dev</code> again. <Link href="/setup" className="underline hover:text-amber-100">Setup guide →</Link></p>
               )}
