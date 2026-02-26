@@ -1,0 +1,57 @@
+{
+  "name": "brandbloom",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "postinstall": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "test:integration": "node --test tests/integration/api-flow.test.mjs",
+    "workers": "concurrently \"npm run worker:brand\" \"npm run worker:image\"",
+    "worker:brand": "tsx workers/brand-analyzer.ts",
+    "worker:image": "tsx workers/image-generator.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@prisma/client": "^5.22.0",
+    "@tanstack/react-query": "^5.0.0",
+    "@trpc/client": "^11.0.0",
+    "@trpc/next": "^11.0.0",
+    "@trpc/react-query": "^11.0.0",
+    "@trpc/server": "^11.0.0",
+    "bcryptjs": "^2.4.3",
+    "bullmq": "^5.0.0",
+    "canvas": "^3.2.1",
+    "ioredis": "^5.3.0",
+    "next": "^16.1.6",
+    "next-auth": "^4.24.5",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "replicate": "^0.34.1",
+    "stripe": "^17.4.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "20.19.33",
+    "@types/react": "18.3.28",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.0",
+    "concurrently": "^8.0.0",
+    "dotenv": "^16.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "14.2.18",
+    "postcss": "^8.4.0",
+    "prisma": "^5.22.0",
+    "tailwindcss": "^3.4.0",
+    "tsx": "^4.0.0",
+    "typescript": "5.9.3"
+  },
+  "optionalDependencies": {
+    "puppeteer": "^23.0.0"
+  }
+}

@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  password  String?   // hashed; for Credentials provider
+  credits   Int       @default(10)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  brands    Brand[]
+  assets    Asset[]
+  campaigns Campaign[]
+}
+
+model Brand {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // — Canonical Brand Intelligence (enterprise schema) —
+  name            String
+  sourceType      String?  // "url" | "logo" | "manual" | "hybrid"
+  logoUrl         String?
+
+  primaryColor    String?  // hex, e.g. #1a1a1a
+  secondaryColors String?  // JSON array of hex strings (SQLite)
+
+  headingFont     String?
+  bodyFont        String?
+
+  toneOfVoice     String?
+  personalityTraits String? // JSON array of strings (SQLite)
+
+  industry        String?
+  targetAudience  String?
+
+  visualStyle     String?
+  brandArchetype  String?  // e.g. Explorer, Creator, Ruler
+
+  tagline         String?
+  mission         String?
+  vision          String?
+  brandStory      String?
+
+  deepAnalysis    String?  // JSON: full Brand Intelligence / extended analysis
+
+  // — Legacy (kept for migration; prefer canonical fields) —
+  siteUrl         String?
+  domain          String?
+  description     String?
+  colors          String?  // JSON array of hex (derive primaryColor + secondaryColors)
+  image           String?
+  fonts           String?  // JSON array (derive headingFont, bodyFont)
+  logos           String?  // JSON array
+  socialAccounts  String?
+  personality     String?  // comma-separated (derive personalityTraits)
+  tone            String?
+  strategyProfile String?
+  source          String?
+
+  isBrandLockEnabled Boolean @default(false)
+  designConstraints  String?  // JSON: allowedColors, lockedLogoPosition, allowedFonts, maxHeadlineLines, ctaTone, minMargin, logoRequired
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  assets          Asset[]
+  campaigns       Campaign[]
+}
+
+model Campaign {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brandId          String
+  brand            Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  title            String
+  goal             String
+  strategySummary  String
+  consistencyScore Float?
+  objective        String?  // campaign memory: awareness | engagement | conversion | retention
+  targetPersona    String?  // campaign memory
+  mode             String?  // "quick" | "advanced"
+  duration         String?  // e.g. "1 week", "2 weeks"
+  status           String   @default("draft")  // "draft" | "generating" | "complete"
+  assetPlanSnapshot String?  // JSON: full assetPlan[] for "Why these assets" UX
+  createdAt        DateTime @default(now())
+  assets           Asset[]
+}
+
+model Asset {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brandId          String?
+  brand            Brand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  campaignId       String?
+  campaign         Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  url              String?   // null when status is pending/generating (campaign assets)
+  label            String
+  status           String    @default("complete")  // "pending" | "generating" | "complete"
+  type             String   // social | ad | thumbnail | banner
+  width            Int
+  height           Int
+  prompt           String?
+  aspectRatio      String?
+  model            String?
+  sourceIdea       String?
+  brandSnapshot    String?  // JSON snapshot of brand context used for this generation
+  blueprint        String?  // JSON: layout + intent from generation pipeline
+  finalPrompt      String?  // exact prompt sent to image model
+  ideaType         String?  // e.g. linkedin_post, instagram_story
+  consistencyScore Float?   // optional quality/consistency score
+  backgroundUrl    String?   // AI-generated background only (no text/logos)
+  finalImageUrl   String?   // deterministic composite: background + layout + text + logo
+  objective       String?   // campaign strategy: awareness | engagement | conversion | retention
+  messagingFramework String?   // campaign strategy: e.g. AIDA, PAS
+  emotionalTone   String?   // campaign strategy: tone used for this asset
+  performanceScore Float?   // campaign memory: optional performance metric
+  createdAt       DateTime @default(now())
+}
