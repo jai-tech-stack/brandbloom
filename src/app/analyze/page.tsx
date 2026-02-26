@@ -563,7 +563,7 @@ function AnalyzeContent() {
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
-      const data = await safeJson<{ assets?: unknown[]; error?: string; credits?: number; demo?: boolean; replicateAttempted?: boolean }>(res);
+      const data = await safeJson<{ assets?: GeneratedAsset[]; error?: string; credits?: number; demo?: boolean; replicateAttempted?: boolean }>(res);
       if (res.status === 401) {
         saveBrandBeforeLoginRedirect();
         router.replace(`/login?callbackUrl=${encodeURIComponent(`/analyze?url=${encodeURIComponent(url)}`)}`);
@@ -677,7 +677,7 @@ function AnalyzeContent() {
           aspectRatio: platformAspect,
         }),
       });
-      const data = await safeJson<{ assets?: unknown[]; error?: string; credits?: number }>(res);
+      const data = await safeJson<{ assets?: GeneratedAsset[]; error?: string; credits?: number }>(res);
       if (res.status === 401) {
         saveBrandBeforeLoginRedirect();
         router.replace(`/login?callbackUrl=${encodeURIComponent(`/analyze?url=${encodeURIComponent(url)}`)}`);
@@ -685,8 +685,8 @@ function AnalyzeContent() {
       }
       if (!res.ok) throw new Error(data.error ?? "Resize failed");
       if (data.assets?.length) {
-        const newAsset = { ...data.assets[0], id: String(assets.length + 1), label: platformLabel };
-        setAssets((prev) => [...prev, newAsset]);
+        const newAsset: GeneratedAsset = { ...data.assets[0], id: String((assets ?? []).length + 1), label: platformLabel };
+        setAssets((prev) => [...(prev ?? []), newAsset]);
         setSelectedAssetId(newAsset.id);
       }
       if (typeof data.credits === "number") {
@@ -729,7 +729,7 @@ function AnalyzeContent() {
           aspectRatio: "1:1",
         }),
       });
-      const data = await safeJson<{ assets?: unknown[]; error?: string; credits?: number }>(res);
+      const data = await safeJson<{ assets?: GeneratedAsset[]; error?: string; credits?: number }>(res);
       if (res.status === 401) {
         saveBrandBeforeLoginRedirect();
         router.replace(`/login?callbackUrl=${encodeURIComponent(`/analyze?url=${encodeURIComponent(url)}`)}`);
@@ -737,8 +737,8 @@ function AnalyzeContent() {
       }
       if (!res.ok) throw new Error(data.error ?? "Variation failed");
       if (data.assets?.length) {
-        const newAsset = { ...data.assets[0], id: String(assets.length + 1), label: "Variation" };
-        setAssets((prev) => [...prev, newAsset]);
+        const newAsset: GeneratedAsset = { ...data.assets[0], id: String((assets ?? []).length + 1), label: "Variation" };
+        setAssets((prev) => [...(prev ?? []), newAsset]);
         setSelectedAssetId(newAsset.id);
       }
       if (typeof data.credits === "number") {
@@ -1568,7 +1568,7 @@ function AnalyzeContent() {
     }
 
     function downloadAllAssets() {
-      assets.forEach((asset, index) => {
+      (assets ?? []).forEach((asset, index) => {
         setTimeout(() => downloadAsset(asset), index * 500);
       });
     }

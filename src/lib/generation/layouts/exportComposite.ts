@@ -15,8 +15,17 @@ export async function exportHtmlToPng(
   try {
     // Optional dependency: use variable so TS doesn't require puppeteer types at build time
     const mod = "puppeteer";
+    type PuppeteerPage = {
+      setViewport: (o: unknown) => Promise<void>;
+      setContent: (h: string, o: unknown) => Promise<void>;
+      screenshot: (o: unknown) => Promise<Buffer | string>;
+    };
+    type PuppeteerBrowser = {
+      newPage: () => Promise<PuppeteerPage>;
+      close: () => Promise<void>;
+    };
     const puppeteer = await import(/* webpackIgnore: true */ mod).catch(() => null) as {
-      default: { launch: (opts: { headless: boolean; args: string[] }) => Promise<{ newPage: () => Promise<{ setViewport: (o: unknown) => Promise<void>; setContent: (h: string, o: unknown) => Promise<void>; screenshot: (o: unknown) => Promise<Buffer | string>; }; close: () => Promise<void> }> };
+      default: { launch: (opts: { headless: boolean; args: string[] }) => Promise<PuppeteerBrowser> };
     } | null;
     if (!puppeteer?.default) return null;
     const browser = await puppeteer.default.launch({
