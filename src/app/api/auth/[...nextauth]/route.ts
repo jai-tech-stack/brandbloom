@@ -4,11 +4,9 @@ import { authOptions } from "@/lib/auth";
 
 const nextAuthHandler = NextAuth(authOptions);
 
-async function withJsonError(
-  req: Request,
-  context: { params?: Promise<Record<string, string>> },
-  method: "GET" | "POST"
-) {
+type RouteContext = { params: Promise<{ nextauth: string[] }> };
+
+async function withJsonError(req: Request, context: RouteContext, method: "GET" | "POST") {
   try {
     return await nextAuthHandler(req, context as never);
   } catch (e) {
@@ -20,10 +18,10 @@ async function withJsonError(
   }
 }
 
-export async function GET(req: Request, context: { params?: Promise<Record<string, string>> }) {
+export async function GET(req: Request, context: RouteContext) {
   return withJsonError(req, context, "GET");
 }
 
-export async function POST(req: Request, context: { params?: Promise<Record<string, string>> }) {
+export async function POST(req: Request, context: RouteContext) {
   return withJsonError(req, context, "POST");
 }
