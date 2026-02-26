@@ -17,14 +17,14 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    const detail = (err as { detail?: unknown }).detail;
-    const msg =
-      typeof detail === "string"
-        ? detail
-        : Array.isArray(detail)
-          ? (detail as string[]).join(", ")
-          : res.statusText || "Request failed";
-    throw new Error(msg);
+    const d = (err as { detail?: string | string[] }).detail;
+    throw new Error(
+      typeof d === "string"
+        ? d
+        : Array.isArray(d)
+          ? (d as string[]).join(", ")
+          : res.statusText || "Request failed"
+    );
   }
   return res.json();
 }
