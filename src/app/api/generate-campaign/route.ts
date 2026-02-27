@@ -109,6 +109,15 @@ export async function POST(request: NextRequest) {
     } catch {
       // ignore
     }
+    let aestheticNarrative: string | undefined = undefined;
+    try {
+      if (brandRow.deepAnalysis) {
+        const deep = JSON.parse(brandRow.deepAnalysis as string) as Record<string, unknown>;
+        aestheticNarrative = typeof deep.aestheticNarrative === "string" ? deep.aestheticNarrative : undefined;
+      }
+    } catch {
+      // ignore
+    }
     const brandForPlanner = {
       name: brandRow.name,
       description: brandRow.description ?? undefined,
@@ -117,6 +126,7 @@ export async function POST(request: NextRequest) {
       tone: bi.toneOfVoice ?? undefined,
       visualStyleSummary: bi.visualStyle ?? undefined,
       messagingAngles: strategyProfile?.messagingAngles,
+      aestheticNarrative,
     };
 
     // 0. AI Brand Strategist: produce strategic blueprint (emotional tone, persona, visual direction, content angles)
