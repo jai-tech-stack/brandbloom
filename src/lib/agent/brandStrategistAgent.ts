@@ -64,7 +64,8 @@ function deterministicBlueprint(
 ): StrategicBlueprint {
   const name = brand?.brandName ?? "Brand";
   const persona = brand?.targetAudience ?? "target audience";
-  const tone = brand?.toneOfVoice ?? brandIntelligencePersonalityString(brand ?? null) ?? "professional";
+  // FIX: guard brand before passing to brandIntelligencePersonalityString (doesn't accept null)
+  const tone = brand?.toneOfVoice ?? (brand ? brandIntelligencePersonalityString(brand) : null) ?? "professional";
   const base = intent.trim() || context.trim() || "campaign";
   return {
     emotionalTone: `${tone}; on-brand for ${name}.`,
