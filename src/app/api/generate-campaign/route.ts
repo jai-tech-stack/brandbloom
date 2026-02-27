@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
     } catch {
       // ignore
     }
+    // FIX: keep aestheticNarrative as a standalone variable so it's accessible later for brandForEval
     let aestheticNarrative: string | undefined = undefined;
     try {
       if (brandRow.deepAnalysis) {
@@ -245,7 +246,8 @@ export async function POST(request: NextRequest) {
       description: brandRow.description ?? undefined,
       tone: brandRow.tone ?? undefined,
       personality: brandRow.personality ?? undefined,
-      aestheticNarrative: brandForPlanner.aestheticNarrative,
+      // FIX: use the standalone `aestheticNarrative` variable instead of brandForPlanner.aestheticNarrative
+      aestheticNarrative: aestheticNarrative,
       colors: orchestratorBrand.colors,
     };
     const consistency = await evaluateConsistency(assetsForEval, brandForEval);
