@@ -54,7 +54,8 @@ export async function POST(request: NextRequest) {
     try {
       const Replicate = (await import("replicate")).default;
       const replicate = new Replicate({ auth: token });
-      const output = await replicate.run("stability-ai/stable-diffusion-img2img", {
+      // FIX: cast to unknown first so TypeScript allows narrowing from the never-typed SDK output
+      const output: unknown = await replicate.run("stability-ai/stable-diffusion-img2img", {
         input: {
           image: imageUrl,
           prompt,
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
         },
       } as { input: Record<string, unknown> });
       if (typeof output === "string" && output.startsWith("http")) url = output;
-      else if (Array.isArray(output) && output[0] && typeof output[0] === "string") url = output[0];
+      else if (Array.isArray(output) && output[0] && typeof output[0] === "string") url = output[0] as string;
       else if (output && typeof (output as { url?: string }).url === "string") url = (output as { url: string }).url;
     } catch (sdkErr) {
       console.error("[upload-asset] Replicate SDK error:", (sdkErr as Error).message);

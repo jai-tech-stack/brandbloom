@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { resolveAuthUser } from "@/lib/resolve-auth-user";
 import { planCampaign } from "@/lib/agent/campaignPlanner";
@@ -187,7 +188,8 @@ export async function POST(request: NextRequest) {
 
     // 3. Create Campaign and Assets, deduct credits
     const campaign = await prisma.$transaction(async (tx) => {
-      const camp = await tx.campaign.create({
+      const db = tx as PrismaClient;
+      const camp = await db.campaign.create({
         data: {
           userId: user.id,
           brandId: brandRow.id,
@@ -202,7 +204,7 @@ export async function POST(request: NextRequest) {
 
       const hasReplicate = !!(process.env.REPLICATE_API_TOKEN ?? process.env.REPLICATE_API_KEY ?? "").trim();
       for (const a of successful) {
-        await tx.asset.create({
+        await db.asset.create({
           data: {
             userId: user.id,
             brandId: brandRow.id,
@@ -226,7 +228,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      await tx.user.update({
+      await db.user.update({
         where: { id: user.id },
         data: { credits: { decrement: successful.length } },
       });
