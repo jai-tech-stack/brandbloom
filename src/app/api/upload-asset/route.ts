@@ -17,6 +17,17 @@ function buildPrompt(brand: { name?: string; colors?: string[]; description?: st
   return parts.join(" ");
 }
 
+/** Run replicate and return output typed as unknown to avoid SDK never-type inference. */
+async function replicateRun(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  replicate: { run: (...args: any[]) => Promise<any> },
+  model: string,
+  input: Record<string, unknown>
+): Promise<unknown> {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+  return replicate.run(model, { input });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = await resolveAuthUser(request);
@@ -54,16 +65,14 @@ export async function POST(request: NextRequest) {
     try {
       const Replicate = (await import("replicate")).default;
       const replicate = new Replicate({ auth: token });
-      // FIX: cast to unknown first so TypeScript allows narrowing from the never-typed SDK output
-      const output: unknown = await replicate.run("stability-ai/stable-diffusion-img2img", {
-        input: {
-          image: imageUrl,
-          prompt,
-          num_inference_steps: 25,
-          guidance_scale: 7.5,
-          prompt_strength: 0.8,
-        },
-      } as { input: Record<string, unknown> });
+      // Use helper that returns Promise<unknown> to avoid SDK never-type inference
+      const output: unknown = await replicateRun(replicate, "stability-ai/stable-diffusion-img2img", {
+        image: imageUrl,
+        prompt,
+        num_inference_steps: 25,
+        guidance_scale: 7.5,
+        prompt_strength: 0.8,
+      });
       if (typeof output === "string" && output.startsWith("http")) url = output;
       else if (Array.isArray(output) && output[0] && typeof output[0] === "string") url = output[0] as string;
       else if (output && typeof (output as { url?: string }).url === "string") url = (output as { url: string }).url;
