@@ -129,6 +129,7 @@ const worker = new Worker<ImageJobPayload>(
       data: { credits: { decrement: 1 } },
     });
 
+    // FIX: removed `as Record<string, unknown>` cast — Prisma types the data object directly
     const asset = await prisma.asset.create({
       data: {
         userId,
@@ -144,7 +145,7 @@ const worker = new Worker<ImageJobPayload>(
         finalImageUrl: finalImageUrl ?? backgroundUrl,
         blueprint: JSON.stringify(blueprint),
         ideaType: blueprint.ideaType ?? "custom",
-      } as Record<string, unknown>,
+      },
     });
 
     return { assetId: asset.id, url: asset.url, finalImageUrl: asset.finalImageUrl };
