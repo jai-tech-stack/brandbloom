@@ -7,6 +7,17 @@
   --foreground: #fafaf9;
   --brand: #ea751d;
   --brand-muted: #b54412;
+  /* Typography scale — use for consistency */
+  --text-h1: 1.875rem;
+  --text-h2: 1.5rem;
+  --text-h3: 1.125rem;
+  --text-body: 1rem;
+  --text-small: 0.875rem;
+  --text-caption: 0.75rem;
+  /* Spacing — consistent margins */
+  --space-section: 1.5rem;
+  --space-block: 1rem;
+  --space-inline: 0.5rem;
 }
 
 body {

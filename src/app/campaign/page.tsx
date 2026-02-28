@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import Image from "next/image";
@@ -84,8 +84,10 @@ export default function CampaignPage() {
 
   const [isPlanning, setIsPlanning] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingProgress, setGeneratingProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [planPreview, setPlanPreview] = useState<PlanPreview | null>(null);
+  const generateSubmittedRef = useRef(false);
   const [completedCampaign, setCompletedCampaign] = useState<{
     id: string;
     title: string;
@@ -96,29 +98,31 @@ export default function CampaignPage() {
     brand: { id: string; name: string; domain: string };
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const brandsFetchedRef = useRef(false);
 
   useEffect(() => {
-    if (status === "authenticated") {
-      fetch("/api/brands", { credentials: "include" })
-        .then((r) => {
-          if (r.status === 401) {
-            window.location.href = "/login?callbackUrl=" + encodeURIComponent("/campaign");
-            return null;
-          }
-          return r.json();
-        })
-        .then((data) => {
-          if (data?.brands) {
-            setBrands(data.brands);
-            if (data.brands.length > 0 && !brandId) setBrandId(data.brands[0].id);
-          }
-        })
-        .catch(() => setError("Failed to load brands"))
-        .finally(() => setLoading(false));
-    } else if (status === "unauthenticated") {
-      setLoading(false);
+    if (status !== "authenticated" || brandsFetchedRef.current) {
+      if (status === "unauthenticated") setLoading(false);
+      return;
     }
-  }, [status, brandId]);
+    brandsFetchedRef.current = true;
+    fetch("/api/brands", { credentials: "include" })
+      .then((r) => {
+        if (r.status === 401) {
+          window.location.href = "/login?callbackUrl=" + encodeURIComponent("/campaign");
+          return null;
+        }
+        return r.json();
+      })
+      .then((data) => {
+        if (data?.brands) {
+          setBrands(data.brands);
+          if (data.brands.length > 0) setBrandId((prev) => prev || data.brands[0].id);
+        }
+      })
+      .catch(() => setError("Failed to load brands"))
+      .finally(() => setLoading(false));
+  }, [status]);
 
   const selectedBrand = brands.find((b) => b.id === brandId);
   const isUrlBrand = selectedBrand?.sourceType === "url";
@@ -257,9 +261,12 @@ export default function CampaignPage() {
   }
 
   async function handleGenerateAllAssets() {
-    if (!planPreview) return;
+    if (!planPreview || generateSubmittedRef.current) return;
+    generateSubmittedRef.current = true;
     setError(null);
     setIsGenerating(true);
+    const total = Math.min(planPreview.assetPlan.length, 6);
+    setGeneratingProgress({ current: 0, total });
     try {
       const res = await fetch("/api/campaign/generate-assets", {
         method: "POST",
@@ -269,11 +276,15 @@ export default function CampaignPage() {
       });
       const data = await res.json();
       if (res.status === 401) {
+        generateSubmittedRef.current = false;
+        setGeneratingProgress(null);
         window.location.href = "/login?callbackUrl=" + encodeURIComponent("/campaign");
         return;
       }
       if (!res.ok) {
         setError(data.error ?? "Asset generation failed.");
+        generateSubmittedRef.current = false;
+        setGeneratingProgress(null);
         return;
       }
       if (data.credits != null) {
@@ -289,10 +300,13 @@ export default function CampaignPage() {
         brand: data.campaign.brand,
       });
       setPlanPreview(null);
+      setGeneratingProgress(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
+      setGeneratingProgress(null);
     } finally {
       setIsGenerating(false);
+      generateSubmittedRef.current = false;
     }
   }
 
@@ -306,8 +320,9 @@ export default function CampaignPage() {
     return (
       <main className="min-h-screen">
         <Header />
-        <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+          <p className="text-small text-stone-400">Loading your brands…</p>
         </div>
       </main>
     );
@@ -333,12 +348,24 @@ export default function CampaignPage() {
       <Header />
       <div className="mx-auto max-w-4xl px-4 pt-24 pb-24">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Campaign</h1>
-          <p className="mt-1 text-stone-400">Create a strategic campaign plan, then generate all assets.</p>
+          <h1 className="text-display font-bold text-white">Campaign</h1>
+          <p className="mt-1 text-body text-stone-400">Create a strategic campaign plan, then generate assets. No new features — clarity and consistency.</p>
+          <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-surface-600 bg-surface-800/50 px-3 py-1.5 text-caption text-stone-400">
+            <span aria-hidden>◇</span> Strategy powered by AI Brand Consultant
+          </div>
         </div>
 
-        <div className="mb-6 rounded-xl border border-surface-600 bg-surface-800/50 p-4">
-          <label className="mb-2 block text-sm font-medium text-stone-300">Brand</label>
+        {!completedCampaign && !planPreview && (
+          <div className="mb-6 flex items-center gap-2 text-small text-stone-500">
+            <span className="font-medium text-stone-400">
+              Step {planPreview ? 4 : brandId && (skipBriefStep || (requireBrief && briefMode !== null)) ? (requireBrief && briefMode !== null ? 3 : 2) : 1} of 4
+            </span>
+          </div>
+        )}
+
+        <div className="mb-section rounded-xl border border-surface-600 bg-surface-800/50 p-6">
+          <p className="mb-inline text-small text-stone-400">Which brand is this campaign for? This keeps strategy and assets aligned to one identity.</p>
+          <label className="mb-2 mt-block block text-h2 font-medium text-stone-300">Brand</label>
           <select
             value={brandId}
             onChange={(e) => {
@@ -346,10 +373,10 @@ export default function CampaignPage() {
               setBriefMode(null);
               setPlanPreview(null);
             }}
-            className="w-full rounded-lg border border-surface-600 bg-surface-800 px-4 py-3 text-white focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-surface-600 bg-surface-800 px-4 py-3 text-body text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
           >
             {brands.length === 0 ? (
-              <option value="">No brands — add one first</option>
+              <option value="">No brands yet — add a brand first</option>
             ) : (
               brands.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -363,15 +390,18 @@ export default function CampaignPage() {
         {brandId && !planPreview && !completedCampaign && (
           <>
             {skipBriefStep && (
-              <form onSubmit={handleGenerateCampaign} className="mb-8 rounded-xl border border-surface-600 bg-surface-800/50 p-6">
-                <p className="mb-4 text-stone-300">
+              <form onSubmit={handleGenerateCampaign} className="mb-8 rounded-xl border border-surface-600 bg-surface-800/50 p-6 transition-all duration-300 animate-fade-in">
+                <p className="mb-block text-body text-stone-300">
                   Website intelligence detected. We&apos;ve analyzed your brand automatically.
                 </p>
-                <label className="mb-2 block text-sm font-medium text-stone-300">Campaign objective</label>
+                <label className="mb-inline mt-block block text-h2 font-medium text-stone-300">
+                  What outcome do you want from this campaign?
+                </label>
+                <p className="mb-3 text-small text-stone-500">This helps us position your messaging and choose the right asset mix.</p>
                 <select
                   value={urlGoal}
                   onChange={(e) => setUrlGoal(e.target.value)}
-                  className="mb-4 w-full rounded-lg border border-surface-600 bg-surface-800 px-4 py-3 text-white focus:border-brand-500 focus:outline-none"
+                  className="mb-4 w-full rounded-lg border border-surface-600 bg-surface-800 px-4 py-3 text-body text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                   disabled={isPlanning}
                 >
                   {GOAL_OPTIONS.map((o) => (
@@ -379,16 +409,16 @@ export default function CampaignPage() {
                   ))}
                 </select>
                 {error && (
-                  <div className="mb-4 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  <div className="mb-4 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-small text-red-200">
                     {error}
                   </div>
                 )}
                 <button
                   type="submit"
                   disabled={isPlanning}
-                  className="w-full rounded-xl bg-brand-500 py-3 font-semibold text-white hover:bg-brand-400 disabled:opacity-50"
+                  className="w-full rounded-xl bg-brand-500 py-3 text-body font-semibold text-white hover:bg-brand-400 disabled:opacity-50"
                 >
-                  {isPlanning ? "Generating campaign…" : "Generate Campaign"}
+                  {isPlanning ? "Analyzing your brand positioning…" : "Generate campaign plan"}
                 </button>
               </form>
             )}
@@ -397,14 +427,15 @@ export default function CampaignPage() {
                 <p className="mb-4 text-stone-300">
                   Since you don&apos;t have a website yet, we need a brief from you. Your campaign and assets will be generated <strong>only</strong> from this brief.
                 </p>
-                <h2 className="mb-4 text-lg font-semibold text-white">Tell us what you want to achieve right now</h2>
+                <h2 className="mb-inline mt-block text-h2 font-semibold text-white">How do you want to brief us?</h2>
+                <p className="mb-4 text-small text-stone-500">Choose one. This keeps the process clear and intentional.</p>
                 <div className="flex flex-wrap gap-4">
                   <button
                     type="button"
                     onClick={() => setBriefMode("quick")}
                     className="rounded-xl border-2 border-surface-500 px-6 py-4 text-left transition hover:border-brand-500 hover:bg-surface-700/50"
                   >
-                    <span className="block font-medium text-white">Quick Mode</span>
+                    <span className="block font-medium text-white">Quick</span>
                     <span className="mt-1 block text-sm text-stone-400">Single text box — describe your goal and we’ll plan the campaign.</span>
                   </button>
                   <button
@@ -412,18 +443,19 @@ export default function CampaignPage() {
                     onClick={() => setBriefMode("advanced")}
                     className="rounded-xl border-2 border-surface-500 px-6 py-4 text-left transition hover:border-brand-500 hover:bg-surface-700/50"
                   >
-                    <span className="block font-medium text-white">Advanced Mode</span>
-                    <span className="mt-1 block text-sm text-stone-400">Goal, platform, timeline, budget — structured brief.</span>
+                    <span className="block font-medium text-white">Advanced</span>
+                    <span className="mt-1 block text-small text-stone-400">Goal, platform, timeline, budget — structured brief.</span>
                   </button>
                 </div>
               </div>
             )}
             {requireBrief && briefMode !== null && (
               <form onSubmit={handleGenerateCampaign} className="mb-8 rounded-xl border border-surface-600 bg-surface-800/50 p-6">
-                <p className="mb-4 text-sm text-stone-400">Campaign and assets will be generated from this brief. Fill it in, then click Generate Campaign.</p>
+                <p className="mb-4 text-small text-stone-500">Campaign and assets will be generated only from this brief.</p>
                 {briefMode === "quick" && (
                   <>
-                    <label className="mb-2 block text-sm font-medium text-stone-300">What do you want to achieve?</label>
+                    <label className="mb-2 block text-h2 font-medium text-stone-300">What do you want to achieve?</label>
+                    <p className="mb-2 text-small text-stone-500">Describe your goal in one paragraph. This helps us position your campaign and choose the right assets.</p>
                     <textarea
                       value={quickDescription}
                       onChange={(e) => setQuickDescription(e.target.value)}
@@ -437,7 +469,8 @@ export default function CampaignPage() {
                 {briefMode === "advanced" && (
                   <div className="space-y-4">
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-stone-300">Goal</label>
+                      <label className="mb-1 block text-h2 font-medium text-stone-300">What outcome do you want?</label>
+                      <p className="mb-2 text-small text-stone-500">This helps us position your messaging correctly.</p>
                       <select
                         value={advGoal}
                         onChange={(e) => setAdvGoal(e.target.value)}
@@ -450,7 +483,8 @@ export default function CampaignPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-stone-300">Platform</label>
+                      <label className="mb-1 block text-h2 font-medium text-stone-300">Where will you use these assets?</label>
+                      <p className="mb-2 text-small text-stone-500">Select one or more. This shapes format and messaging.</p>
                       <div className="flex flex-wrap gap-2">
                         {PLATFORM_OPTIONS.map((p) => (
                           <button
@@ -466,7 +500,8 @@ export default function CampaignPage() {
                       </div>
                     </div>
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-stone-300">Timeline</label>
+                      <label className="mb-1 block text-h2 font-medium text-stone-300">What timeline are you working to?</label>
+                      <p className="mb-2 text-small text-stone-500">Helps us scope the campaign and asset count.</p>
                       <select
                         value={advTimeline}
                         onChange={(e) => setAdvTimeline(e.target.value)}
@@ -479,7 +514,8 @@ export default function CampaignPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-stone-300">Budget</label>
+                      <label className="mb-1 block text-h2 font-medium text-stone-300">What’s your promotion budget?</label>
+                      <p className="mb-2 text-small text-stone-500">Organic vs paid affects creative approach.</p>
                       <select
                         value={advBudget}
                         onChange={(e) => setAdvBudget(e.target.value)}
@@ -492,11 +528,12 @@ export default function CampaignPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-stone-300">Extra details (optional)</label>
+                      <label className="mb-1 block text-h2 font-medium text-stone-300">Anything else we should know?</label>
+                      <p className="mb-2 text-small text-stone-500">Optional. Audiences, offers, or constraints.</p>
                       <textarea
                         value={advDescription}
                         onChange={(e) => setAdvDescription(e.target.value)}
-                        placeholder="Any additional context..."
+                        placeholder="e.g. target audience, key offer, do’s and don’ts…"
                         rows={2}
                         className="w-full rounded-lg border border-surface-600 bg-surface-800 px-4 py-3 text-white placeholder:text-stone-500 focus:border-brand-500 focus:outline-none"
                         disabled={isPlanning}
@@ -521,9 +558,9 @@ export default function CampaignPage() {
                   <button
                     type="submit"
                     disabled={isPlanning || !canSubmitLogoBrief}
-                    className="rounded-xl bg-brand-500 px-6 py-2 font-semibold text-white hover:bg-brand-400 disabled:opacity-50"
+                    className="rounded-xl bg-brand-500 px-6 py-2 text-body font-semibold text-white hover:bg-brand-400 disabled:opacity-50"
                   >
-                    {isPlanning ? "Generating campaign…" : "Generate Campaign"}
+                    {isPlanning ? "Analyzing your brand positioning…" : "Generate campaign plan"}
                   </button>
                   {!canSubmitLogoBrief && briefMode === "quick" && (
                     <p className="mt-2 text-xs text-stone-500">Describe your goal above to enable generation.</p>
@@ -536,20 +573,41 @@ export default function CampaignPage() {
 
         {planPreview && (
           <div className="mb-8 rounded-xl border border-surface-600 bg-surface-800/50 p-6">
-            <h2 className="text-xl font-bold text-white">{planPreview.campaignName}</h2>
-            <p className="mt-1 text-sm text-stone-400">Duration: {planPreview.duration}</p>
-            <p className="mt-4 text-stone-300">{planPreview.strategySummary}</p>
-            <h3 className="mt-6 text-lg font-semibold text-white">Planned assets</h3>
-            <ul className="mt-3 space-y-3">
-              {planPreview.assetPlan.map((item, i) => (
-                <li key={i} className="rounded-lg border border-surface-600 bg-surface-800/50 p-3">
-                  <p className="font-medium text-white">{item.assetType.replace(/_/g, " ")} · {item.platform}</p>
-                  <p className="mt-1 text-sm text-stone-400">{item.purpose}</p>
+            <div className="mb-6 inline-flex items-center gap-2 rounded-lg border border-surface-600 bg-surface-800/80 px-3 py-1.5 text-caption text-stone-400">
+              <span aria-hidden>◇</span> Strategy powered by AI Brand Consultant
+            </div>
+            <h2 className="text-h1 font-bold text-white">Campaign overview</h2>
+            <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div>
+                <dt className="text-caption font-medium uppercase tracking-wide text-stone-500">Campaign name</dt>
+                <dd className="mt-0.5 text-body font-medium text-white">{planPreview.campaignName}</dd>
+              </div>
+              <div>
+                <dt className="text-caption font-medium uppercase tracking-wide text-stone-500">Objective</dt>
+                <dd className="mt-0.5 text-body text-stone-300">{planPreview.objective}</dd>
+              </div>
+              <div>
+                <dt className="text-caption font-medium uppercase tracking-wide text-stone-500">Duration</dt>
+                <dd className="mt-0.5 text-body text-stone-300">{planPreview.duration}</dd>
+              </div>
+            </dl>
+            <h3 className="mt-6 text-h2 font-semibold text-white">Why this strategy works</h3>
+            <p className="mt-2 text-body text-stone-300">{planPreview.strategySummary}</p>
+            <h3 className="mt-6 text-h2 font-semibold text-white">Planned assets</h3>
+            <p className="mt-1 text-small text-stone-500">Each asset has a clear funnel role and business impact.</p>
+            <ul className="mt-4 space-y-3">
+              {(planPreview.assetPlan.slice(0, 6)).map((item, i) => (
+                <li key={i} className="rounded-lg border border-surface-600 bg-surface-800/50 p-4">
+                  <p className="text-body font-medium text-white">{item.assetType.replace(/_/g, " ")} · {item.platform}</p>
+                  <p className="mt-1 text-caption font-medium uppercase tracking-wide text-stone-500">Purpose</p>
+                  <p className="mt-0.5 text-small text-stone-300">{item.purpose}</p>
+                  <p className="mt-2 text-caption font-medium uppercase tracking-wide text-stone-500">Business impact</p>
+                  <p className="mt-0.5 text-small text-stone-400">Supports campaign objective and consistent brand presence.</p>
                 </li>
               ))}
             </ul>
             {error && (
-              <div className="mt-4 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              <div className="mt-4 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-small text-red-200">
                 {error}
               </div>
             )}
@@ -557,28 +615,34 @@ export default function CampaignPage() {
               type="button"
               onClick={handleGenerateAllAssets}
               disabled={isGenerating}
-              className="mt-6 w-full rounded-xl bg-brand-500 py-3 font-semibold text-white hover:bg-brand-400 disabled:opacity-50"
+              className="mt-6 w-full rounded-xl bg-brand-500 py-3 text-body font-semibold text-white hover:bg-brand-400 disabled:opacity-50"
             >
-              {isGenerating ? "Generating…" : "Generate All Assets"}
+              {isGenerating ? "Generating…" : "Approve & generate assets"}
             </button>
           </div>
         )}
 
         {isGenerating && (
           <div className="mb-8 rounded-xl border border-surface-600 bg-surface-800/30 p-6">
-            <p className="text-stone-300">Generating…</p>
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-surface-700">
-              <div className="h-full w-2/3 animate-pulse bg-brand-500" />
+            <p className="text-body font-medium text-stone-300">
+              {generatingProgress ? `Designing campaign visuals… (${generatingProgress.current + 1} of ${generatingProgress.total})` : "Designing campaign visuals…"}
+            </p>
+            <p className="mt-1 text-small text-stone-500">This may take a minute. Do not refresh.</p>
+            <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-surface-700">
+              <div
+                className="h-full bg-brand-500 transition-all duration-500"
+                style={{ width: generatingProgress ? `${Math.round(((generatingProgress.current + 1) / generatingProgress.total) * 100)}%` : "33%" }}
+              />
             </div>
           </div>
         )}
 
         {completedCampaign && (
           <div className="rounded-xl border border-surface-600 bg-surface-800/50 p-6">
-            <h2 className="text-xl font-bold text-white">Campaign Generated Successfully</h2>
-            <p className="mt-2 text-stone-300">{completedCampaign.title}</p>
+            <h2 className="text-h1 font-bold text-white">Campaign complete</h2>
+            <p className="mt-2 text-body text-stone-300">{completedCampaign.title}</p>
             {completedCampaign.strategySummary && (
-              <p className="mt-4 text-stone-400">{completedCampaign.strategySummary}</p>
+              <p className="mt-4 text-body text-stone-400">{completedCampaign.strategySummary}</p>
             )}
             {(() => {
               let purposes: AssetPlanItem[] = [];
@@ -591,10 +655,10 @@ export default function CampaignPage() {
               }
               return purposes.length > 0 ? (
                 <div className="mt-6">
-                  <h3 className="text-lg font-semibold text-white">Why these assets were created</h3>
+                  <h3 className="text-h2 font-semibold text-white">Why these assets were created</h3>
                   <ul className="mt-2 space-y-2">
                     {purposes.map((item, i) => (
-                      <li key={i} className="text-sm text-stone-400">
+                      <li key={i} className="text-small text-stone-400">
                         <span className="font-medium text-stone-300">{item.assetType.replace(/_/g, " ")} ({item.platform}):</span> {item.purpose}
                       </li>
                     ))}
@@ -603,7 +667,7 @@ export default function CampaignPage() {
               ) : null;
             })()}
             <div className="mt-8">
-              <h3 className="mb-4 text-lg font-semibold text-white">Assets</h3>
+              <h3 className="mb-4 text-h2 font-semibold text-white">Assets</h3>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {completedCampaign.assets.map((asset) => (
                   <div key={asset.id} className="overflow-hidden rounded-lg border border-surface-600 bg-surface-800/50">

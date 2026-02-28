@@ -467,7 +467,12 @@ function AnalyzeContent() {
           setSecondsLeft(0);
           setTimeout(() => goToPhase("review"), 600);
         } else {
-          setExtractError(data.error ?? "Could not analyze URL");
+          const serverError = data.error ?? "Could not analyze URL.";
+          const is502or503 = res.status === 502 || res.status === 503 || res.status === 504;
+          const message = is502or503
+            ? "The server took too long or is temporarily busy. Please try again in a moment."
+            : serverError;
+          setExtractError(message);
           setStepIndex(EXTRACTION_STEPS.length);
           goToPhase("generated");
         }
@@ -478,7 +483,11 @@ function AnalyzeContent() {
         setStepIndex(EXTRACTION_STEPS.length);
         setSecondsLeft(0);
         setBrand(null);
-        setExtractError(isAbort ? "Extraction timed out. Please try again." : "Could not analyze URL.");
+        setExtractError(
+          isAbort
+            ? "Extraction timed out. Please try again."
+            : "The server could not complete the request. Please try again in a moment."
+        );
         goToPhase("generated");
       }
     })();
@@ -845,7 +854,12 @@ function AnalyzeContent() {
             <>
               <h1 className="mb-2 text-3xl font-bold text-white">Extraction did not complete</h1>
               <p className="mb-6 text-stone-400">We need full brand data before you can create assets. No placeholder or partial data is used.</p>
-              {extractError && <p className="mb-8 text-sm text-amber-400">{extractError}</p>}
+              {extractError && (
+                <div className="mb-8 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                  <p className="text-sm text-amber-200">{extractError}</p>
+                  <p className="mt-2 text-xs text-stone-500">If this keeps happening, try a simpler URL or try again in a few minutes.</p>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => {

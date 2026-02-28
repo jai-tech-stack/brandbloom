@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { scrapeBrandFromUrl } from "@/lib/brand-scraper";
+
+// Allow up to 60s so scrape + AI analysis can complete (Vercel Pro; Hobby limit is 10s)
+export const maxDuration = 60;
 import { analyzeBrandWithAI } from "@/lib/ai-brand-analysis";
 import { deepBrandAnalysis } from "@/lib/deep-brand-analysis";
 import { analyzeDeepStrategy } from "@/lib/brand/deepStrategyAnalysis";
@@ -323,8 +326,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(brand);
   } catch (e) {
     console.error("extract-brand error:", e);
+    const message = e instanceof Error ? e.message : "Brand extraction failed";
+    const isTimeout = typeof message === "string" && /timeout|ETIMEDOUT|deadline/i.test(message);
     return NextResponse.json(
-      { error: "Brand extraction failed" },
+      { error: isTimeout ? "Analysis took too long. Please try again or use a simpler URL." : "Brand extraction failed. Please try again." },
       { status: 500 }
     );
   }

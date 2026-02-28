@@ -34,6 +34,19 @@ const config: Config = {
           500: "#57534e",
         },
       },
+      fontSize: {
+        "display": ["1.875rem", { lineHeight: "1.2" }],
+        "h1": ["1.5rem", { lineHeight: "1.3" }],
+        "h2": ["1.125rem", { lineHeight: "1.35" }],
+        "body": ["1rem", { lineHeight: "1.5" }],
+        "small": ["0.875rem", { lineHeight: "1.45" }],
+        "caption": ["0.75rem", { lineHeight: "1.4" }],
+      },
+      spacing: {
+        "section": "1.5rem",
+        "block": "1rem",
+        "inline": "0.5rem",
+      },
       animation: {
         "fade-in": "fadeIn 0.6s ease-out both",
         "slide-up": "slideUp 0.5s ease-out 0.1s both",
