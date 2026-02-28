@@ -151,12 +151,17 @@ const SYSTEM_PROMPT = `You are an AI Marketing Strategist. Given a brand profile
 
 /**
  * Generate a strategic campaign plan (no images). Validates with Zod; retries once on invalid output.
+ * Optional additionalDirection: user's extra instructions so the AI can tailor the plan (e.g. changes, focus, tone).
  */
 export async function generateStrategicCampaign(
   brandProfile: BrandProfileForStrategic,
-  briefInput: BriefInput
+  briefInput: BriefInput,
+  additionalDirection?: string
 ): Promise<StrategicCampaignOutput> {
-  const userContent = buildUserPrompt(brandProfile, briefInput);
+  let userContent = buildUserPrompt(brandProfile, briefInput);
+  if (typeof additionalDirection === "string" && additionalDirection.trim()) {
+    userContent += `\n\nUser's additional direction or changes (apply these when planning):\n${additionalDirection.trim().slice(0, 1000)}`;
+  }
 
   const run = async (retryWithStrict = false): Promise<StrategicCampaignOutput | null> => {
     const system = retryWithStrict

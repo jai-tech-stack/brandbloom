@@ -81,6 +81,7 @@ export default function CampaignPage() {
   const [advDescription, setAdvDescription] = useState("");
 
   const [urlGoal, setUrlGoal] = useState(GOAL_OPTIONS[0].value);
+  const [additionalPrompt, setAdditionalPrompt] = useState("");
 
   const [isPlanning, setIsPlanning] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -149,7 +150,11 @@ export default function CampaignPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ brandId, goal: urlGoal }),
+          body: JSON.stringify({
+            brandId,
+            goal: urlGoal,
+            additionalPrompt: additionalPrompt.trim() || undefined,
+          }),
         });
         const data = await res.json();
         if (res.status === 401) {
@@ -190,6 +195,7 @@ export default function CampaignPage() {
           body: JSON.stringify({
             brandId,
             brief: { type: "quick" as const, description: quickDescription.trim() },
+            additionalPrompt: additionalPrompt.trim() || undefined,
           }),
         });
         const data = await res.json();
@@ -234,6 +240,7 @@ export default function CampaignPage() {
               budget: advBudget,
               description: advDescription.trim() || undefined,
             },
+            additionalPrompt: additionalPrompt.trim() || undefined,
           }),
         });
         const data = await res.json();
@@ -411,7 +418,7 @@ export default function CampaignPage() {
             {skipBriefStep && (
               <form onSubmit={handleGenerateCampaign} className="mb-8 rounded-xl border border-surface-600 bg-surface-800/50 p-6 transition-all duration-300 animate-fade-in">
                 <p className="mb-block text-body text-stone-300">
-                  Website intelligence detected. We&apos;ve analyzed your brand automatically.
+                  Your campaign is built from your brand data (from your website). We use it to plan messaging and assets.
                 </p>
                 <label className="mb-inline mt-block block text-h2 font-medium text-stone-300">
                   What outcome do you want from this campaign?
@@ -427,6 +434,18 @@ export default function CampaignPage() {
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
+                <label className="mb-2 mt-block block text-h2 font-medium text-stone-300">
+                  Any changes or specific direction? (optional)
+                </label>
+                <p className="mb-2 text-small text-stone-500">Add a prompt and our AI will use it to tailor the plan and outputs.</p>
+                <textarea
+                  value={additionalPrompt}
+                  onChange={(e) => setAdditionalPrompt(e.target.value)}
+                  placeholder="e.g. Focus on B2B, more formal tone, highlight sustainability…"
+                  rows={2}
+                  className="mb-4 w-full rounded-lg border border-surface-600 bg-surface-800 px-4 py-3 text-body text-white placeholder:text-stone-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  disabled={isPlanning}
+                />
                 {error && (
                   <div className="mb-4 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-small text-red-200">
                     {error}
@@ -560,6 +579,18 @@ export default function CampaignPage() {
                     </div>
                   </div>
                 )}
+                <div className="mt-4">
+                  <label className="mb-1 block text-h2 font-medium text-stone-300">Any changes or specific direction? (optional)</label>
+                  <p className="mb-2 text-small text-stone-500">Add a prompt and our AI will use it to tailor the plan and outputs.</p>
+                  <textarea
+                    value={additionalPrompt}
+                    onChange={(e) => setAdditionalPrompt(e.target.value)}
+                    placeholder="e.g. Focus on B2B, more formal tone, highlight sustainability…"
+                    rows={2}
+                    className="w-full rounded-lg border border-surface-600 bg-surface-800 px-4 py-3 text-body text-white placeholder:text-stone-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                    disabled={isPlanning}
+                  />
+                </div>
                 {error && (
                   <div className="mt-4 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-200">
                     {error}

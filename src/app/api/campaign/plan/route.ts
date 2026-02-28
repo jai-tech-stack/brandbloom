@@ -30,7 +30,12 @@ export async function POST(request: NextRequest) {
     recentPlanByUser.set(user.id, now);
 
     const body = await request.json();
-    const { brandId, brief, goal: urlFlowGoal } = body as { brandId?: string; brief?: BriefInput; goal?: string };
+    const { brandId, brief, goal: urlFlowGoal, additionalPrompt } = body as {
+      brandId?: string;
+      brief?: BriefInput;
+      goal?: string;
+      additionalPrompt?: string;
+    };
 
     if (!brandId || typeof brandId !== "string") {
       return NextResponse.json({ error: "brandId is required." }, { status: 400 });
@@ -102,7 +107,11 @@ export async function POST(request: NextRequest) {
       targetAudience: brandRow.targetAudience ?? undefined,
     };
 
-    const plan = await generateStrategicCampaign(brandProfile, effectiveBrief);
+    const plan = await generateStrategicCampaign(
+      brandProfile,
+      effectiveBrief,
+      typeof additionalPrompt === "string" ? additionalPrompt.trim() || undefined : undefined
+    );
     const goal = getGoalFromBrief(effectiveBrief);
     const mode = effectiveBrief.type === "quick" ? "quick" : "advanced";
 
