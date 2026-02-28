@@ -50,7 +50,7 @@ const BACKGROUND_ONLY_PREFIX =
 export function buildBackgroundOnlyPrompt(
   blueprint: Blueprint,
   brand: BrandForPrompt | null,
-  _options?: { brandLock?: boolean }
+  options?: { brandLock?: boolean; logoOverlay?: boolean }
 ): string {
   const parts: string[] = [BACKGROUND_ONLY_PREFIX];
 
@@ -69,6 +69,9 @@ export function buildBackgroundOnlyPrompt(
   if (brand?.personality || brand?.tone) {
     const t = [brand.personality, brand.tone].filter(Boolean).join(", ");
     if (t) parts.push(`Aesthetic: ${t.slice(0, 80)}.`);
+  }
+  if (options?.logoOverlay) {
+    parts.push("Cohesive with brand identity; a logo will be overlaid. Keep the background uncluttered and on-brand.");
   }
 
   parts.push("High quality, professional, 4K. Background only.");

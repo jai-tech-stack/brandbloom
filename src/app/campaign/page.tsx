@@ -88,6 +88,7 @@ export default function CampaignPage() {
   const [error, setError] = useState<string | null>(null);
   const [planPreview, setPlanPreview] = useState<PlanPreview | null>(null);
   const generateSubmittedRef = useRef(false);
+  const generatingProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [completedCampaign, setCompletedCampaign] = useState<{
     id: string;
     title: string;
@@ -120,7 +121,7 @@ export default function CampaignPage() {
           if (data.brands.length > 0) setBrandId((prev) => prev || data.brands[0].id);
         }
       })
-      .catch(() => setError("Failed to load brands"))
+      .catch(() => setError("We couldn't load your brands. Please refresh the page."))
       .finally(() => setLoading(false));
   }, [status]);
 
@@ -135,7 +136,7 @@ export default function CampaignPage() {
   async function handleGenerateCampaign(e: React.FormEvent) {
     e.preventDefault();
     if (!brandId) {
-      setError("Select a brand.");
+      setError("Select a brand to continue.");
       return;
     }
     setError(null);
@@ -156,7 +157,7 @@ export default function CampaignPage() {
           return;
         }
         if (!res.ok) {
-          setError(data.error ?? "Campaign plan failed.");
+          setError(data.error ?? "We couldn't complete this step. Please try again; we're committed to fixing any recurring issues.");
           return;
         }
         setPlanPreview({
@@ -168,7 +169,7 @@ export default function CampaignPage() {
           assetPlan: data.assetPlan ?? [],
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
+        setError(err instanceof Error ? err.message : "We hit an issue on our side. Please try again.");
       } finally {
         setIsPlanning(false);
       }
@@ -177,7 +178,7 @@ export default function CampaignPage() {
 
     if (briefMode === "quick") {
       if (!quickDescription.trim()) {
-        setError("Describe what you want to achieve.");
+        setError("Describe your goal so we can plan the right assets.");
         return;
       }
       setIsPlanning(true);
@@ -197,7 +198,7 @@ export default function CampaignPage() {
           return;
         }
         if (!res.ok) {
-          setError(data.error ?? "Campaign plan failed.");
+          setError(data.error ?? "We couldn't complete this step. Please try again; we're committed to fixing any recurring issues.");
           return;
         }
         setPlanPreview({
@@ -209,7 +210,7 @@ export default function CampaignPage() {
           assetPlan: data.assetPlan ?? [],
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
+        setError(err instanceof Error ? err.message : "We hit an issue on our side. Please try again.");
       } finally {
         setIsPlanning(false);
       }
@@ -241,7 +242,7 @@ export default function CampaignPage() {
           return;
         }
         if (!res.ok) {
-          setError(data.error ?? "Campaign plan failed.");
+          setError(data.error ?? "We couldn't complete this step. Please try again; we're committed to fixing any recurring issues.");
           return;
         }
         setPlanPreview({
@@ -253,7 +254,7 @@ export default function CampaignPage() {
           assetPlan: data.assetPlan ?? [],
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
+        setError(err instanceof Error ? err.message : "We hit an issue on our side. Please try again.");
       } finally {
         setIsPlanning(false);
       }
@@ -267,6 +268,14 @@ export default function CampaignPage() {
     setIsGenerating(true);
     const total = Math.min(planPreview.assetPlan.length, 6);
     setGeneratingProgress({ current: 0, total });
+    if (generatingProgressIntervalRef.current) clearInterval(generatingProgressIntervalRef.current);
+    const progressInterval = setInterval(() => {
+      setGeneratingProgress((prev) => {
+        if (!prev || prev.current >= prev.total - 1) return prev;
+        return { ...prev, current: prev.current + 1 };
+      });
+    }, 2500);
+    generatingProgressIntervalRef.current = progressInterval;
     try {
       const res = await fetch("/api/campaign/generate-assets", {
         method: "POST",
@@ -276,13 +285,17 @@ export default function CampaignPage() {
       });
       const data = await res.json();
       if (res.status === 401) {
+        if (generatingProgressIntervalRef.current) clearInterval(generatingProgressIntervalRef.current);
+        generatingProgressIntervalRef.current = null;
         generateSubmittedRef.current = false;
         setGeneratingProgress(null);
         window.location.href = "/login?callbackUrl=" + encodeURIComponent("/campaign");
         return;
       }
       if (!res.ok) {
-        setError(data.error ?? "Asset generation failed.");
+        if (generatingProgressIntervalRef.current) clearInterval(generatingProgressIntervalRef.current);
+        generatingProgressIntervalRef.current = null;
+        setError(data.error ?? "We couldn't complete this step. Please try again; we're committed to fixing any recurring issues.");
         generateSubmittedRef.current = false;
         setGeneratingProgress(null);
         return;
@@ -302,9 +315,11 @@ export default function CampaignPage() {
       setPlanPreview(null);
       setGeneratingProgress(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setError(err instanceof Error ? err.message : "We hit an issue on our side. Please try again.");
       setGeneratingProgress(null);
     } finally {
+      if (generatingProgressIntervalRef.current) clearInterval(generatingProgressIntervalRef.current);
+      generatingProgressIntervalRef.current = null;
       setIsGenerating(false);
       generateSubmittedRef.current = false;
     }
@@ -353,9 +368,10 @@ export default function CampaignPage() {
           <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-surface-600 bg-surface-800/50 px-3 py-1.5 text-caption text-stone-400">
             <span aria-hidden>◇</span> Strategy powered by AI Brand Consultant
           </div>
+          <p className="mt-2 text-caption text-stone-500">We&apos;re committed to accurate, on-brand results—no placeholders, no guesswork.</p>
         </div>
 
-        {!completedCampaign && !planPreview && (
+        {!completedCampaign && (
           <div className="mb-6 flex items-center gap-2 text-small text-stone-500">
             <span className="font-medium text-stone-400">
               Step {planPreview ? 4 : brandId && (skipBriefStep || (requireBrief && briefMode !== null)) ? (requireBrief && briefMode !== null ? 3 : 2) : 1} of 4
@@ -376,7 +392,7 @@ export default function CampaignPage() {
             className="w-full rounded-lg border border-surface-600 bg-surface-800 px-4 py-3 text-body text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
           >
             {brands.length === 0 ? (
-              <option value="">No brands yet — add a brand first</option>
+              <option value="">Create your first brand</option>
             ) : (
               brands.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -385,6 +401,9 @@ export default function CampaignPage() {
               ))
             )}
           </select>
+          {brands.length === 0 && (
+            <p className="mt-3 text-small text-stone-500">Add a brand from the Analyze page (enter your website) to run campaigns.</p>
+          )}
         </div>
 
         {brandId && !planPreview && !completedCampaign && (
@@ -675,7 +694,7 @@ export default function CampaignPage() {
                       {asset.url ? (
                         <Image src={asset.url} alt={asset.label} fill unoptimized className="object-cover" />
                       ) : (
-                        <div className="flex h-full items-center justify-center text-stone-500">No image</div>
+                        <div className="flex h-full items-center justify-center px-3 text-center text-sm text-stone-500">This asset didn&apos;t generate. You can remove it or create a new campaign.</div>
                       )}
                     </div>
                     <div className="p-3">

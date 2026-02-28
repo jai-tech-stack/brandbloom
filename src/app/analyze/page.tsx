@@ -16,7 +16,7 @@ async function safeJson<T = Record<string, unknown>>(res: Response): Promise<T> 
     // #region agent log
     if (typeof fetch !== "undefined") fetch("http://127.0.0.1:7926/ingest/90767cbc-7ef4-42c1-8d35-81a50ac82a6f", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd0430" }, body: JSON.stringify({ sessionId: "dd0430", runId: "run1", hypothesisId: "D", location: "analyze/page.tsx:safeJson", message: "safeJson non-JSON content-type", data: { url: res?.url ?? "" }, timestamp: Date.now() }) }).catch(() => {});
     // #endregion
-    return { error: "Server returned an invalid response. Please try again." } as T;
+    return { error: "We couldn't read the server response. Please retry; if it continues, we're on it." } as T;
   }
   try {
     return JSON.parse(text) as T;
@@ -24,7 +24,7 @@ async function safeJson<T = Record<string, unknown>>(res: Response): Promise<T> 
     // #region agent log
     if (typeof fetch !== "undefined") fetch("http://127.0.0.1:7926/ingest/90767cbc-7ef4-42c1-8d35-81a50ac82a6f", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "dd0430" }, body: JSON.stringify({ sessionId: "dd0430", runId: "run1", hypothesisId: "D", location: "analyze/page.tsx:safeJson", message: "safeJson fallback (non-JSON or parse error)", data: { url: typeof res?.url === "string" ? res.url : "" }, timestamp: Date.now() }) }).catch(() => {});
     // #endregion
-    return { error: "Invalid response from server. Please try again." } as T;
+    return { error: "We couldn't read the server response. Please retry; if it continues, we're on it." } as T;
   }
 }
 
@@ -470,7 +470,7 @@ function AnalyzeContent() {
           const serverError = data.error ?? "Could not analyze URL.";
           const is502or503 = res.status === 502 || res.status === 503 || res.status === 504;
           const message = is502or503
-            ? "The server took too long or is temporarily busy. Please try again in a moment."
+            ? "This request took longer than expected. We're working on reliability. Please try again in a moment."
             : serverError;
           setExtractError(message);
           setStepIndex(EXTRACTION_STEPS.length);
@@ -485,8 +485,8 @@ function AnalyzeContent() {
         setBrand(null);
         setExtractError(
           isAbort
-            ? "Extraction timed out. Please try again."
-            : "The server could not complete the request. Please try again in a moment."
+            ? "This request took longer than expected. Please try again in a moment."
+            : "We couldn't complete the request. Please try again in a moment."
         );
         goToPhase("generated");
       }
@@ -852,12 +852,12 @@ function AnalyzeContent() {
         <div className="mx-auto max-w-4xl px-4 pt-24 pb-24 text-center">
           {extractionFailed ? (
             <>
-              <h1 className="mb-2 text-3xl font-bold text-white">Extraction did not complete</h1>
-              <p className="mb-6 text-stone-400">We need full brand data before you can create assets. No placeholder or partial data is used.</p>
+              <h1 className="mb-2 text-3xl font-bold text-white">We couldn&apos;t complete brand extraction for this URL</h1>
+              <p className="mb-6 text-stone-400">We only create assets from complete brand data so your outputs stay accurate.</p>
               {extractError && (
                 <div className="mb-8 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
                   <p className="text-sm text-amber-200">{extractError}</p>
-                  <p className="mt-2 text-xs text-stone-500">If this keeps happening, try a simpler URL or try again in a few minutes.</p>
+                  <p className="mt-2 text-xs text-stone-500">We recommend a direct website URL (e.g. homepage). If it still doesn&apos;t complete, we&apos;ll keep improving—please try again in a few minutes.</p>
                 </div>
               )}
               <button
@@ -871,7 +871,7 @@ function AnalyzeContent() {
                 }}
                 className="rounded-xl bg-brand-500 px-8 py-4 text-lg font-semibold text-white hover:bg-brand-400"
               >
-                Try again
+                Retry extraction
               </button>
             </>
           ) : (
@@ -903,8 +903,8 @@ function AnalyzeContent() {
         <main className="min-h-screen">
           <Header />
           <div className="mx-auto max-w-4xl px-4 pt-24 pb-24 text-center">
-            <h1 className="mb-2 text-3xl font-bold text-white">Brand review unavailable</h1>
-            <p className="mb-6 text-stone-400">Please re-run extraction first.</p>
+            <h1 className="mb-2 text-3xl font-bold text-white">Complete extraction first</h1>
+            <p className="mb-6 text-stone-400">Run extraction to build your brand kit, then you can review and create assets.</p>
             <button
               type="button"
               onClick={() => {
@@ -916,7 +916,7 @@ function AnalyzeContent() {
               }}
               className="rounded-xl bg-brand-500 px-8 py-4 text-lg font-semibold text-white hover:bg-brand-400"
             >
-              Re-extract brand
+              Run extraction
             </button>
           </div>
         </main>

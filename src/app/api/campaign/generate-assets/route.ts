@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     }
     if (campaign.status === "generating") {
       return NextResponse.json(
-        { error: "Campaign assets are already being generated." },
+        { error: "Generation is already in progress for this campaign." },
         { status: 409 }
       );
     }
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
     const creditCheck = await prisma.user.findUnique({ where: { id: user.id }, select: { credits: true } });
     if (!creditCheck || creditCheck.credits < pending.length) {
       return NextResponse.json(
-        { error: `Not enough credits. You have ${creditCheck?.credits ?? 0}; need ${pending.length}.` },
+        { error: `Insufficient credits for this run (need ${pending.length}; you have ${creditCheck?.credits ?? 0}).` },
         { status: 402 }
       );
     }
@@ -156,15 +156,16 @@ export async function POST(request: NextRequest) {
         campaignMemoryHint: campaignMemoryHint ?? undefined,
       });
 
-      const imageUrl = result.imageUrl ?? "";
+      const imageUrl = result.imageUrl?.trim() || null;
       const label = result.blueprint.intent?.headline?.slice(0, 40) || asset.label || "Asset";
       const type = ideaTypeToAssetType(result.ideaType);
+      const status = imageUrl ? "complete" : "failed";
 
       await prisma.asset.update({
         where: { id: asset.id },
         data: {
           url: imageUrl,
-          status: "complete",
+          status,
           label: label.slice(0, 200),
           type,
           width: result.width,
@@ -213,7 +214,7 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     console.error("[campaign/generate-assets] error:", e);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Asset generation failed." },
+      { error: e instanceof Error ? e.message : "We couldn't generate this asset. Please try again." },
       { status: 500 }
     );
   }

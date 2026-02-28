@@ -186,6 +186,7 @@ export async function POST(request: NextRequest) {
 
     let brand: BrandData;
     let pageTextExcerpt: string | undefined;
+    let strategyProfileJson: string | null = null;
 
     if (BACKEND_BLOOM_URL) {
       try {
@@ -239,8 +240,24 @@ export async function POST(request: NextRequest) {
           metaKeywords: scraped.metaKeywords,
           jsonLd: scraped.jsonLd,
         };
-        const dna = await deepBrandAnalysis(deepInput);
-        if (Object.keys(dna).length > 0) {
+        const strategyInput = {
+          name: brand.name,
+          description: brand.description,
+          tagline: brand.tagline,
+          colors: brand.colors,
+          fonts: scraped.fonts,
+          websiteScrapedText: pageTextExcerpt,
+          aestheticNarrative: undefined as string | undefined,
+          targetAudience: undefined as string | undefined,
+          personality: undefined as string | undefined,
+          tone: undefined as string | undefined,
+          visualCues: [brand.colors?.length ? `Colors: ${brand.colors.slice(0, 6).join(", ")}` : ""].filter(Boolean).join("; "),
+        };
+        const [dna, strategyProfileResult] = await Promise.all([
+          deepBrandAnalysis(deepInput).then((d) => d),
+          analyzeDeepStrategy(strategyInput).catch(() => null),
+        ]);
+        if (dna && Object.keys(dna).length > 0) {
           if (dna.personality) brand.personality = dna.personality;
           if (dna.tone) brand.tone = dna.tone;
           if (dna.values?.length) brand.values = dna.values;
@@ -258,6 +275,10 @@ export async function POST(request: NextRequest) {
           });
           if (analysis.personality) brand.personality = analysis.personality;
           if (analysis.tone) brand.tone = analysis.tone;
+        }
+        if (strategyProfileResult) {
+          strategyProfileJson = JSON.stringify(strategyProfileResult);
+          brand.strategyProfile = strategyProfileResult as unknown as Record<string, unknown>;
         }
       } catch {
         // Keep scraped data; personality/tone optional
@@ -283,28 +304,6 @@ export async function POST(request: NextRequest) {
     const bi = unifiedToBrandIntelligence(unified, "url", brand.image ?? null);
     const canonical = brandIntelligenceToPrismaData(bi);
     const deepAnalysisJson = JSON.stringify(unified);
-
-    let strategyProfileJson: string | null = null;
-    try {
-      const strategyInput = {
-        name: brand.name,
-        description: brand.description,
-        tagline: brand.tagline,
-        colors: brand.colors,
-        fonts: brand.fonts,
-        websiteScrapedText: pageTextExcerpt,
-        aestheticNarrative: brand.aestheticNarrative,
-        targetAudience: brand.targetAudience,
-        personality: brand.personality,
-        tone: brand.tone,
-        visualCues: [brand.colors?.length ? `Colors: ${brand.colors.slice(0, 6).join(", ")}` : "", brand.fonts?.length ? `Fonts: ${brand.fonts.slice(0, 3).join(", ")}` : ""].filter(Boolean).join("; "),
-      };
-      const strategyProfile = await analyzeDeepStrategy(strategyInput);
-      strategyProfileJson = JSON.stringify(strategyProfile);
-      brand.strategyProfile = strategyProfile as unknown as Record<string, unknown>;
-    } catch {
-      // optional; keep going without strategy profile
-    }
 
     const saved = await prisma.brand.create({
       data: {

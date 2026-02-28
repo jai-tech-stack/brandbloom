@@ -148,6 +148,7 @@ export async function runGenerationPipeline(input: OrchestratorInput): Promise<O
       blueprint,
       brand: brandForRender,
       brandLock: brandLock || effectiveLock,
+      logoOverlay: !!logoImageUrl,
       sessionId: sid,
     });
     if (!backgroundUrl) {

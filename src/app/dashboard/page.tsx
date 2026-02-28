@@ -188,7 +188,7 @@ export default function DashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {brands.length === 0 ? (
               <div className="col-span-full rounded-xl border border-surface-600 bg-surface-800/50 p-8 text-center">
-                <p className="text-stone-400">No brands yet. Start by analyzing a website!</p>
+                <p className="text-stone-400">Add your first brand by analyzing your website on the Analyze page.</p>
                 <Link href="/" className="mt-4 inline-block text-brand-400 hover:text-brand-300">
                   Analyze your first brand →
                 </Link>
@@ -266,13 +266,19 @@ export default function DashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredAssets.length === 0 ? (
               <div className="col-span-full rounded-xl border border-surface-600 bg-surface-800/50 p-8 text-center">
-                <p className="text-stone-400">No matching assets. Adjust filters or generate new ones.</p>
+                <p className="text-stone-400">No assets match your filters. Try different filters or generate new assets from a campaign.</p>
               </div>
             ) : (
               filteredAssets.map((asset) => (
                 <div key={asset.id} className="group relative overflow-hidden rounded-xl border border-surface-600 bg-surface-800/50 transition hover:border-brand-500/50">
                   <div className="relative aspect-video w-full bg-surface-700">
-                    <Image src={asset.url} alt={asset.label} fill unoptimized className="object-cover" />
+                    {asset.url ? (
+                      <Image src={asset.url} alt={asset.label} fill unoptimized className="object-cover" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center px-3 text-center text-sm text-stone-500">
+                        This asset couldn&apos;t be generated. Delete it or create a new campaign.
+                      </div>
+                    )}
                   </div>
                   <div className="p-4">
                     <p className="truncate font-medium text-white">{asset.label}</p>
@@ -284,7 +290,8 @@ export default function DashboardPage() {
                       <button
                         type="button"
                         onClick={() => downloadAsset(asset)}
-                        className="flex-1 rounded-lg bg-brand-500 py-2 text-xs font-medium text-white hover:bg-brand-400"
+                        disabled={!asset.url}
+                        className="flex-1 rounded-lg bg-brand-500 py-2 text-xs font-medium text-white hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Download
                       </button>

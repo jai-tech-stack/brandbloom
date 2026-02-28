@@ -56,7 +56,7 @@ function LoginContent() {
         return;
       }
       if (!res?.ok) {
-        setError("Sign in failed. Please try again.");
+        setError("We couldn't sign you in. Please check your details and try again.");
         setLoading(false);
         return;
       }
@@ -64,7 +64,7 @@ function LoginContent() {
       window.location.replace(url);
       return;
     } catch {
-      setError("Something went wrong. Check your connection.");
+      setError("We couldn't complete sign-in. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
