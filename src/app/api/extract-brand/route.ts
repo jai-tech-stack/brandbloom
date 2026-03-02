@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { scrapeBrandFromUrl } from "@/lib/brand-scraper";
 
-// Allow up to 60s so scrape + AI analysis can complete (Vercel Pro; Hobby limit is 10s)
+// Allow up to 60s on Vercel Pro; Hobby has 10s — use streaming or background jobs for Hobby
 export const maxDuration = 60;
+
 import { analyzeBrandWithAI } from "@/lib/ai-brand-analysis";
 import { deepBrandAnalysis } from "@/lib/deep-brand-analysis";
 import { analyzeDeepStrategy } from "@/lib/brand/deepStrategyAnalysis";
@@ -25,29 +26,28 @@ export type BrandData = {
   personality?: string;
   tone?: string;
   brandId?: string;
-  /** Deep LLM analysis (Brand DNA). */
   values?: string[];
   targetAudience?: string;
   visualStyleSummary?: string;
   keyMessages?: string[];
   toneKeywords?: string[];
   aestheticNarrative?: string;
-  /** Strategic profile (audience, positioning, archetype, toneSpectrum, visualDNA, messagingAngles, contentPillars). */
   strategyProfile?: Record<string, unknown>;
-}
+};
 
 const BACKEND_BLOOM_URL = process.env.BACKEND_BLOOM_URL || "";
 
 const HEX_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-const RGB_RE = /^\s*rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*[\d.]+)?\s*\)\s*$/;
+const RGB_RE =
+  /^\s*rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*[\d.]+)?\s*\)\s*$/;
 
-/** Normalize a single color to hex; return null if invalid. */
 function toHex(color: string): string | null {
   const s = color.trim();
   if (!s) return null;
   if (HEX_RE.test(s)) {
     const hex = s.slice(1);
-    if (hex.length === 3) return "#" + hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    if (hex.length === 3)
+      return "#" + hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
     return "#" + hex.slice(0, 6).toLowerCase();
   }
   const rgb = s.match(RGB_RE);
@@ -60,7 +60,6 @@ function toHex(color: string): string | null {
   return null;
 }
 
-/** Deduplicate and normalize colors to hex; max 6. */
 function normalizeAndDedupeColors(colors: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -75,7 +74,6 @@ function normalizeAndDedupeColors(colors: string[]): string[] {
   return out;
 }
 
-/** Luminance (0–1) from hex. */
 function luminance(hex: string): number {
   const r = parseInt(hex.slice(1, 3), 16) / 255;
   const g = parseInt(hex.slice(3, 5), 16) / 255;
@@ -83,7 +81,6 @@ function luminance(hex: string): number {
   return 0.299 * r + 0.587 * g + 0.114 * b;
 }
 
-/** Saturation (0–1) from hex; 0 = grey. */
 function saturation(hex: string): number {
   const r = parseInt(hex.slice(1, 3), 16) / 255;
   const g = parseInt(hex.slice(3, 5), 16) / 255;
@@ -94,15 +91,14 @@ function saturation(hex: string): number {
   return (max - min) / max;
 }
 
-/** Drop pure black/white; keep brand palette including dark text and light accent. */
 function filterBrandColors(hexColors: string[]): string[] {
   const out: string[] = [];
   for (const hex of hexColors) {
     if (hex.length !== 7) continue;
     const L = luminance(hex);
     const S = saturation(hex);
-    if (L <= 0.03 || L >= 0.99) continue; // skip only pure black/white
-    if (L > 0.12 && L < 0.92 && S <= 0.06) continue; // skip mid neutral greys only
+    if (L <= 0.03 || L >= 0.99) continue;
+    if (L > 0.12 && L < 0.92 && S <= 0.06) continue;
     out.push(hex);
   }
   const filtered = out.slice(0, 6);
@@ -110,8 +106,10 @@ function filterBrandColors(hexColors: string[]): string[] {
   return filtered;
 }
 
-/** Map Brand BLOOM+ backend profile to existing BrandData shape */
-function mapBloomProfileToBrandData(profile: Record<string, unknown>, url: string): BrandData {
+function mapBloomProfileToBrandData(
+  profile: Record<string, unknown>,
+  url: string
+): BrandData {
   const primary = (profile.primary_colors as string[]) || [];
   const secondary = (profile.secondary_colors as string[]) || [];
   const rawColors = [...primary, ...secondary];
@@ -124,10 +122,14 @@ function mapBloomProfileToBrandData(profile: Record<string, unknown>, url: strin
   })();
   const name = domain.replace(/^www\./, "").split(".")[0] || domain;
   const style = (profile.style as string) || "";
-  const mood = Array.isArray(profile.mood) ? (profile.mood as string[]).join(", ") : "";
+  const mood = Array.isArray(profile.mood)
+    ? (profile.mood as string[]).join(", ")
+    : "";
   return {
     name,
-    description: [style, mood].filter(Boolean).join(". ") || "Brand identity extracted from website.",
+    description:
+      [style, mood].filter(Boolean).join(". ") ||
+      "Brand identity extracted from website.",
     tagline: (profile.logo_description as string) || style || "",
     colors: filterBrandColors(normalizeAndDedupeColors(rawColors)),
     image: (profile.logo_url as string) || null,
@@ -142,36 +144,62 @@ function mapBloomProfileToBrandData(profile: Record<string, unknown>, url: strin
 }
 
 /**
- * Fetches the URL and extracts brand data (like Bloom).
- * If BACKEND_BLOOM_URL is set, uses the Brand BLOOM+ Python backend (Claude + CSS extraction).
- * Otherwise uses the Node scraper + AI.
- * If user is logged in, saves Brand to DB and returns brandId.
+ * Check if required AI keys are present for deep analysis.
+ * Returns true if at least one LLM key is configured.
  */
+function hasAIKeys(): boolean {
+  return !!(
+    (process.env.OPENAI_API_KEY ?? "").trim() ||
+    (process.env.ANTHROPIC_API_KEY ?? "").trim()
+  );
+}
+
+/**
+ * Run a promise with a timeout, resolving to null on timeout or error.
+ * Never throws — always returns a result or null.
+ */
+async function withTimeout<T>(
+  fn: () => Promise<T>,
+  timeoutMs: number,
+  label: string
+): Promise<T | null> {
+  try {
+    const result = await Promise.race([
+      fn(),
+      new Promise<null>((resolve) =>
+        setTimeout(() => {
+          console.warn(`[extract-brand] ${label} timed out after ${timeoutMs}ms`);
+          resolve(null);
+        }, timeoutMs)
+      ),
+    ]);
+    return result;
+  } catch (e) {
+    console.warn(`[extract-brand] ${label} failed:`, (e as Error).message);
+    return null;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { url } = body as { url?: string };
+    const body = await request.json().catch(() => ({})) as { url?: string };
+    const { url } = body;
 
     if (!url || typeof url !== "string") {
-      return NextResponse.json(
-        { error: "Missing or invalid url" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing or invalid url" }, { status: 400 });
     }
 
     const trimmed = url.trim();
     const href = trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
+
     try {
       const parsed = new URL(href);
       if (!["http:", "https:"].includes(parsed.protocol)) {
-        return NextResponse.json(
-          { error: "URL must use http or https" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "URL must use http or https" }, { status: 400 });
       }
     } catch {
       return NextResponse.json(
-        { error: "Invalid URL. Use a full URL (e.g. https://example.com)." },
+        { error: "Invalid URL. Use a full URL like https://example.com" },
         { status: 400 }
       );
     }
@@ -188,34 +216,65 @@ export async function POST(request: NextRequest) {
     let pageTextExcerpt: string | undefined;
     let strategyProfileJson: string | null = null;
 
+    // ─── BLOOM+ backend path ───────────────────────────────────────────────
     if (BACKEND_BLOOM_URL) {
       try {
-        const res = await fetch(`${BACKEND_BLOOM_URL.replace(/\/$/, "")}/api/brands/analyze`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: href }),
-        });
+        const res = await fetch(
+          `${BACKEND_BLOOM_URL.replace(/\/$/, "")}/api/brands/analyze`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: href }),
+          }
+        );
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          throw new Error((err as { detail?: string }).detail || res.statusText || "Backend error");
+          throw new Error(
+            (err as { detail?: string }).detail ||
+              res.statusText ||
+              "Backend error"
+          );
         }
         const profile = (await res.json()) as Record<string, unknown>;
         brand = mapBloomProfileToBrandData(profile, href);
       } catch (fetchErr) {
         console.error("extract-brand (BLOOM backend) error:", fetchErr);
         return NextResponse.json(
-          { error: fetchErr instanceof Error ? fetchErr.message : "Brand BLOOM+ backend failed. Is it running?" },
+          {
+            error:
+              fetchErr instanceof Error
+                ? fetchErr.message
+                : "Brand BLOOM+ backend failed. Is it running?",
+          },
           { status: 502 }
         );
       }
     } else {
-      let scraped;
+      // ─── Node scraper path ─────────────────────────────────────────────
+      let scraped: Awaited<ReturnType<typeof scrapeBrandFromUrl>>;
       try {
-        scraped = await scrapeBrandFromUrl(href);
+        scraped = await withTimeout(
+          () => scrapeBrandFromUrl(href),
+          25000,
+          "scrapeBrandFromUrl"
+        ) as Awaited<ReturnType<typeof scrapeBrandFromUrl>>;
+
+        if (!scraped) {
+          return NextResponse.json(
+            {
+              error:
+                "Could not fetch this URL within 25 seconds. The site may be blocking server requests (Cloudflare, login wall, etc.). Try your homepage URL.",
+            },
+            { status: 422 }
+          );
+        }
       } catch (fetchErr) {
         console.error("extract-brand fetch error:", fetchErr);
         return NextResponse.json(
-          { error: "Could not fetch URL. Check that it is public and reachable." },
+          {
+            error:
+              "Could not fetch URL. Check that it is public and reachable (no login required).",
+          },
           { status: 422 }
         );
       }
@@ -229,7 +288,8 @@ export async function POST(request: NextRequest) {
         socialAccounts: scraped.socialAccounts ?? [],
       };
 
-      try {
+      // ─── AI enrichment (only if keys are configured) ───────────────────
+      if (hasAIKeys()) {
         const deepInput = {
           name: scraped.name,
           description: scraped.description,
@@ -251,12 +311,17 @@ export async function POST(request: NextRequest) {
           targetAudience: undefined as string | undefined,
           personality: undefined as string | undefined,
           tone: undefined as string | undefined,
-          visualCues: [brand.colors?.length ? `Colors: ${brand.colors.slice(0, 6).join(", ")}` : ""].filter(Boolean).join("; "),
+          visualCues: brand.colors?.length
+            ? `Colors: ${brand.colors.slice(0, 6).join(", ")}`
+            : "",
         };
+
+        // Run deep analysis and strategy in parallel with individual timeouts
         const [dna, strategyProfileResult] = await Promise.all([
-          deepBrandAnalysis(deepInput).then((d) => d),
-          analyzeDeepStrategy(strategyInput).catch(() => null),
+          withTimeout(() => deepBrandAnalysis(deepInput), 20000, "deepBrandAnalysis"),
+          withTimeout(() => analyzeDeepStrategy(strategyInput), 20000, "analyzeDeepStrategy"),
         ]);
+
         if (dna && Object.keys(dna).length > 0) {
           if (dna.personality) brand.personality = dna.personality;
           if (dna.tone) brand.tone = dna.tone;
@@ -267,25 +332,26 @@ export async function POST(request: NextRequest) {
           if (dna.toneKeywords?.length) brand.toneKeywords = dna.toneKeywords;
           if (dna.aestheticNarrative) brand.aestheticNarrative = dna.aestheticNarrative;
         } else {
-          const analysis = await analyzeBrandWithAI({
-            name: scraped.name,
-            description: scraped.description,
-            tagline: scraped.tagline,
-            colors: scraped.colors,
-          });
-          if (analysis.personality) brand.personality = analysis.personality;
-          if (analysis.tone) brand.tone = analysis.tone;
+          // Fallback: simpler AI analysis
+          const analysis = await withTimeout(
+            () => analyzeBrandWithAI({ name: scraped.name, description: scraped.description, tagline: scraped.tagline, colors: scraped.colors }),
+            10000,
+            "analyzeBrandWithAI"
+          );
+          if (analysis?.personality) brand.personality = analysis.personality;
+          if (analysis?.tone) brand.tone = analysis.tone;
         }
+
         if (strategyProfileResult) {
           strategyProfileJson = JSON.stringify(strategyProfileResult);
           brand.strategyProfile = strategyProfileResult as unknown as Record<string, unknown>;
         }
-      } catch {
-        // Keep scraped data; personality/tone optional
+      } else {
+        console.info("[extract-brand] No AI keys configured — skipping deep analysis. Add OPENAI_API_KEY or ANTHROPIC_API_KEY for richer brand intelligence.");
       }
     }
 
-    // Canonical Brand Intelligence (one structure for all sources)
+    // ─── Canonical Brand Intelligence ─────────────────────────────────────
     const unified = fromUrlBrandData({
       name: brand.name,
       description: brand.description,
@@ -305,6 +371,7 @@ export async function POST(request: NextRequest) {
     const canonical = brandIntelligenceToPrismaData(bi);
     const deepAnalysisJson = JSON.stringify(unified);
 
+    // ─── Save to DB ────────────────────────────────────────────────────────
     const saved = await prisma.brand.create({
       data: {
         userId: authUser.id,
@@ -313,7 +380,9 @@ export async function POST(request: NextRequest) {
         domain: brand.domain,
         image: brand.image,
         logos: JSON.stringify(brand.logos),
-        socialAccounts: brand.socialAccounts?.length ? JSON.stringify(brand.socialAccounts) : null,
+        socialAccounts: brand.socialAccounts?.length
+          ? JSON.stringify(brand.socialAccounts)
+          : null,
         deepAnalysis: deepAnalysisJson,
         strategyProfile: strategyProfileJson,
         source: "url",
@@ -326,9 +395,15 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     console.error("extract-brand error:", e);
     const message = e instanceof Error ? e.message : "Brand extraction failed";
-    const isTimeout = typeof message === "string" && /timeout|ETIMEDOUT|deadline/i.test(message);
+    const isTimeout =
+      typeof message === "string" &&
+      /timeout|ETIMEDOUT|deadline/i.test(message);
     return NextResponse.json(
-      { error: isTimeout ? "Analysis took too long. Please try again or use a simpler URL." : "Brand extraction failed. Please try again." },
+      {
+        error: isTimeout
+          ? "Analysis took too long. Please try again or use your homepage URL (e.g. https://example.com)."
+          : "Brand extraction failed. Please try again.",
+      },
       { status: 500 }
     );
   }
