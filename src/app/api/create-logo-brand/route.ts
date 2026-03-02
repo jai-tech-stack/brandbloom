@@ -266,7 +266,7 @@ export async function POST(request: NextRequest) {
         fonts: fontsJson,
         personality: mergedPersonality || undefined,
         tone: mergedTone || undefined,
-        description: description ?? a.aestheticNarrative || undefined,
+        description: description ?? (a.aestheticNarrative || undefined),
 
         deepAnalysis: JSON.stringify({
           aestheticNarrative: a.aestheticNarrative,
