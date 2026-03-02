@@ -1,445 +1,374 @@
-import path from "path";
 import { NextRequest, NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/db";
 import { resolveAuthUser } from "@/lib/resolve-auth-user";
-import { runGenerationPipeline, runRegenerationFromBlueprint } from "@/lib/generation/orchestrator";
-import type { OrchestratorBrand } from "@/lib/generation/orchestrator";
-import type { Blueprint } from "@/lib/generation/blueprintFactory";
-import { brandRowToIntelligence, brandIntelligenceColors, brandIntelligenceFonts, brandIntelligencePersonalityString } from "@/lib/brand-intelligence";
-import { getCampaignMemory } from "@/lib/strategy/campaignMemory";
-import { parseDesignConstraints } from "@/lib/strategy/constraintValidator";
+import { prisma } from "@/lib/db";
 
-function ensureEnv() {
-  const token = (process.env.REPLICATE_API_TOKEN ?? process.env.REPLICATE_API_KEY ?? "").trim();
-  if (token) return;
-  try {
-    const { config } = require("dotenv");
-    config({ path: path.join(process.cwd(), ".env") });
-  } catch {
-    // dotenv not available
-  }
-}
-ensureEnv();
-
-export type GeneratedAsset = {
-  id: string;
-  url: string;
-  label: string;
-  type: "social" | "ad" | "thumbnail" | "banner";
-  width: number;
-  height: number;
-};
+export const maxDuration = 60;
 
 type BrandInput = {
   name?: string;
   colors?: string[];
   description?: string;
   tagline?: string;
+  personality?: string;
+  tone?: string;
   fonts?: string[];
   logos?: string[];
   socialAccounts?: string[];
-  personality?: string;
-  tone?: string;
   visualStyleSummary?: string;
   aestheticNarrative?: string;
-  strategyProfile?: Record<string, unknown> | null;
+  targetAudience?: string;
+  toneKeywords?: string[];
+  values?: string[];
 };
 
-/** Shape of Brand row when loading by brandId (includes strategyProfile). */
-type BrandForGenerate = {
-  id: string;
-  name: string;
-  tagline: string | null;
-  description: string | null;
-  colors: string;
-  fonts: string | null;
-  logos: string | null;
-  personality: string | null;
-  tone: string | null;
-  visualStyle?: string | null;
-  deepAnalysis: string | null;
-  strategyProfile: string | null;
-};
+/**
+ * Build a rich brand-aware generation prompt.
+ * This is the single most important function — every quality issue in generated
+ * images traces back to a weak prompt. Be as specific as possible.
+ */
+function buildGenerationPrompt(
+  brand: BrandInput | undefined,
+  promptOverride: string | undefined,
+  ideaType: string | undefined
+): string {
+  const baseParts: string[] = [];
 
-/** Shape of Asset row when loading for regeneration (includes blueprint + brand). */
-type AssetForRegen = {
-  blueprint: string | null;
-  brandId: string | null;
-  label: string;
-  type: string;
-  sourceIdea: string | null;
-  brandSnapshot: string | null;
-  brand: { name: string; tagline: string | null; description: string | null; colors: string; fonts: string | null; logos: string | null; personality: string | null; tone: string | null } | null;
-};
+  // User's specific request takes precedence
+  if (promptOverride?.trim()) {
+    baseParts.push(promptOverride.trim());
+  }
 
-/** Map ideaType slug to Asset.type */
-function ideaTypeToAssetType(ideaType: string): "social" | "ad" | "thumbnail" | "banner" {
-  if (/ad|display|social_media_ad/.test(ideaType)) return "ad";
-  if (/thumbnail|youtube_thumbnail/.test(ideaType)) return "thumbnail";
-  if (/banner|cover|header|channel_art/.test(ideaType)) return "banner";
-  return "social";
+  // Brand name context
+  if (brand?.name?.trim()) {
+    baseParts.push(`for ${brand.name}`);
+  }
+
+  // Aesthetic narrative — most valuable for style adherence
+  if (brand?.aestheticNarrative?.trim()) {
+    baseParts.push(brand.aestheticNarrative.trim());
+  }
+
+  // Visual style summary
+  if (brand?.visualStyleSummary?.trim()) {
+    baseParts.push(brand.visualStyleSummary.trim());
+  }
+
+  // Colors — very specific hex values guide the model well
+  if (brand?.colors?.length) {
+    const colorList = brand.colors.slice(0, 4).join(", ");
+    baseParts.push(`using brand colors ${colorList}`);
+  }
+
+  // Tone/personality
+  if (brand?.tone?.trim() || brand?.personality?.trim()) {
+    const toneStr = [brand.tone, brand.personality].filter(Boolean).join(", ");
+    baseParts.push(`${toneStr} aesthetic`);
+  } else if (brand?.toneKeywords?.length) {
+    baseParts.push(brand.toneKeywords.slice(0, 3).join(", ") + " feel");
+  }
+
+  // Description (brief)
+  if (brand?.description?.trim()) {
+    const shortDesc = brand.description.trim().split(".")[0];
+    if (shortDesc.length > 10 && shortDesc.length < 120) {
+      baseParts.push(shortDesc);
+    }
+  }
+
+  // Quality suffix — always append these for professional results
+  const qualitySuffix = "professional commercial design, polished, high quality, brand-consistent, photorealistic or editorial style";
+
+  const prompt = baseParts.join(". ");
+  return prompt ? `${prompt}. ${qualitySuffix}` : `Professional branded marketing image. ${qualitySuffix}`;
 }
 
-/** Build orchestrator brand from body or DB row */
-function toOrchestratorBrand(b: BrandInput | null): OrchestratorBrand | null {
-  if (!b || (!b.name && !(b.colors?.length))) return null;
+/**
+ * Convert aspect ratio string to width/height for Replicate.
+ */
+function aspectRatioToSize(ratio: string): { width: number; height: number } {
+  const map: Record<string, { width: number; height: number }> = {
+    "1:1": { width: 1024, height: 1024 },
+    "4:5": { width: 1024, height: 1280 },
+    "9:16": { width: 768, height: 1344 },
+    "2:3": { width: 832, height: 1248 },
+    "3:4": { width: 896, height: 1152 },
+    "16:9": { width: 1344, height: 768 },
+    "1.91:1": { width: 1344, height: 704 },
+    "4:3": { width: 1152, height: 896 },
+    "5:4": { width: 1152, height: 960 },
+    "3:2": { width: 1248, height: 832 },
+    "21:9": { width: 1536, height: 640 },
+  };
+  return map[ratio] ?? { width: 1024, height: 1024 };
+}
+
+/**
+ * 4K size — double resolution
+ */
+function aspectRatioToSize4K(ratio: string): { width: number; height: number } {
+  const base = aspectRatioToSize(ratio);
+  // Replicate max is typically 2048 for flux-1.1-pro
+  const scale = Math.min(2048 / Math.max(base.width, base.height), 2);
   return {
-    name: b.name,
-    tagline: b.tagline ?? undefined,
-    description: b.description ?? undefined,
-    colors: b.colors,
-    fonts: b.fonts,
-    personality: b.personality ?? undefined,
-    tone: b.tone ?? undefined,
-    aestheticNarrative: b.aestheticNarrative ?? undefined,
-    visualStyleSummary: b.visualStyleSummary ?? undefined,
-    logos: b.logos,
-    strategyProfile: b.strategyProfile ?? undefined,
+    width: Math.round(base.width * scale / 64) * 64,
+    height: Math.round(base.height * scale / 64) * 64,
   };
 }
 
 /**
- * Asset generation API — uses 5-layer pipeline only (orchestrator).
- * Body: url (optional if brandId set), brand (optional), brandId, ideaType, promptOverride, aspectRatio, limit.
+ * Generate image via Replicate Flux.
+ * Standard: flux-schnell (fast, cheap)
+ * Quality: flux-1.1-pro (better quality)
+ * 4K: flux-1.1-pro with higher resolution
  */
-export async function POST(request: NextRequest) {
+async function generateWithReplicate(
+  prompt: string,
+  aspectRatio: string,
+  quality: "standard" | "quality" | "4k" = "standard"
+): Promise<{ url: string; width: number; height: number } | null> {
+  const token = process.env.REPLICATE_API_TOKEN;
+  if (!token) return null;
+
+  const is4k = quality === "4k";
+  const isQuality = quality === "quality" || quality === "4k";
+
+  // Model selection:
+  // - flux-schnell: fast, good for drafts
+  // - flux-1.1-pro: higher quality, slower, better for final assets + 4K
+  const model = isQuality
+    ? "black-forest-labs/flux-1.1-pro"
+    : "black-forest-labs/flux-schnell";
+
+  const size = is4k ? aspectRatioToSize4K(aspectRatio) : aspectRatioToSize(aspectRatio);
+
+  const input: Record<string, unknown> = {
+    prompt,
+    width: size.width,
+    height: size.height,
+    output_quality: is4k ? 100 : 80,
+    output_format: "webp",
+    disable_safety_checker: false,
+  };
+
+  if (isQuality) {
+    // flux-1.1-pro specific params
+    input.prompt_upsampling = true;
+    input.safety_tolerance = 2;
+  } else {
+    // flux-schnell specific
+    input.num_inference_steps = 4;
+    input.go_fast = true;
+  }
+
   try {
-    const body = await request.json();
-    const {
-      url,
-      brand: brandBody,
-      brandId,
-      ideaType: ideaTypeParam,
-      promptOverride,
-      aspectRatio: _aspectRatioParam,
-      limit: limitParam,
-      regenerateFromAssetId,
-      intentOverrides,
-    } = body as {
-      url?: string;
-      brand?: BrandInput;
-      brandId?: string;
-      ideaType?: string;
-      promptOverride?: string;
-      aspectRatio?: string;
-      limit?: number;
-      regenerateFromAssetId?: string;
-      intentOverrides?: Partial<{ headline: string; subtext: string; cta: string; visualDirection: string; toneAdjustment: string }>;
+    const createRes = await fetch("https://api.replicate.com/v1/models/" + model + "/predictions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Prefer: "wait=30",
+      },
+      body: JSON.stringify({ input }),
+    });
+
+    if (!createRes.ok) {
+      const err = await createRes.text();
+      console.warn("[generate-assets] Replicate error:", err);
+      return null;
+    }
+
+    const prediction = await createRes.json() as {
+      id?: string;
+      status?: string;
+      output?: string | string[];
+      error?: string;
+      urls?: { get?: string };
     };
 
-    const user = await resolveAuthUser(request);
-    const userId = user?.id ?? null;
-    if (!userId) {
+    if (prediction.error) {
+      console.warn("[generate-assets] Replicate prediction error:", prediction.error);
+      return null;
+    }
+
+    // Completed immediately
+    if (prediction.status === "succeeded" && prediction.output) {
+      const out = prediction.output;
+      const url = Array.isArray(out) ? out[0] : out;
+      return { url, width: size.width, height: size.height };
+    }
+
+    // Poll
+    if (prediction.id && prediction.urls?.get) {
+      const pollUrl = prediction.urls.get;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const poll = await fetch(pollUrl, { headers: { Authorization: `Bearer ${token}` } });
+        const result = await poll.json() as { status?: string; output?: string | string[]; error?: string };
+
+        if (result.status === "succeeded" && result.output) {
+          const out = result.output;
+          const url = Array.isArray(out) ? out[0] : out;
+          return { url, width: size.width, height: size.height };
+        }
+        if (result.status === "failed" || result.error) {
+          console.warn("[generate-assets] Poll failed:", result.error);
+          return null;
+        }
+      }
+    }
+
+    return null;
+  } catch (e) {
+    console.error("[generate-assets] Replicate call failed:", (e as Error).message);
+    return null;
+  }
+}
+
+/** Demo/placeholder image for when Replicate is not configured */
+function getDemoImage(width: number, height: number, label: string): string {
+  return `https://picsum.photos/seed/${encodeURIComponent(label)}/${width}/${height}`;
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const authUser = await resolveAuthUser(request);
+    if (!authUser) {
+      return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+    }
+
+    // Check credits
+    const userRecord = await prisma.user.findUnique({
+      where: { id: authUser.id },
+      select: { credits: true },
+    }).catch(() => null);
+
+    if (userRecord && typeof userRecord.credits === "number" && userRecord.credits < 1) {
       return NextResponse.json(
-        { error: "Sign in required to generate assets." },
-        { status: 401 }
-      );
-    }
-
-    // Regeneration path: use existing blueprint, modify intent, re-run prompt + execute only
-    if (regenerateFromAssetId && typeof regenerateFromAssetId === "string") {
-      const existing = (await prisma.asset.findFirst({
-        where: { id: regenerateFromAssetId, userId },
-        include: { brand: true },
-      })) as AssetForRegen | null;
-      if (!existing) {
-        return NextResponse.json({ error: "Asset not found or access denied." }, { status: 404 });
-      }
-      const blueprintJson = existing.blueprint;
-      if (!blueprintJson) {
-        return NextResponse.json({ error: "Asset has no blueprint; cannot regenerate." }, { status: 400 });
-      }
-      let blueprint: Blueprint;
-      try {
-        blueprint = JSON.parse(blueprintJson) as Blueprint;
-      } catch {
-        return NextResponse.json({ error: "Invalid blueprint stored." }, { status: 400 });
-      }
-      const regenBrand = existing.brand
-        ? (() => {
-            const bi = brandRowToIntelligence(existing.brand as Parameters<typeof brandRowToIntelligence>[0]);
-            return toOrchestratorBrand({
-              name: existing.brand.name,
-              tagline: existing.brand.tagline ?? undefined,
-              description: existing.brand.description ?? undefined,
-              colors: brandIntelligenceColors(bi),
-              fonts: brandIntelligenceFonts(bi).length ? brandIntelligenceFonts(bi) : undefined,
-              logos: existing.brand.logos ? (typeof existing.brand.logos === "string" ? JSON.parse(existing.brand.logos) : existing.brand.logos) : undefined,
-              personality: brandIntelligencePersonalityString(bi) ?? undefined,
-              tone: bi.toneOfVoice ?? undefined,
-              visualStyleSummary: bi.visualStyle ?? undefined,
-            });
-          })()
-        : toOrchestratorBrand(brandBody ?? null);
-      const u = await prisma.user.findUnique({ where: { id: userId } });
-      if (!u || u.credits < 1) {
-        return NextResponse.json({ error: "Not enough credits to regenerate." }, { status: 402 });
-      }
-      const result = await runRegenerationFromBlueprint({
-        blueprint,
-        brand: regenBrand,
-        intentOverrides,
-        sessionId: `brandbloom-regen-${Date.now()}`,
-      });
-      if (!result.imageUrl) {
-        return NextResponse.json({ error: "Regeneration produced no image." }, { status: 500 });
-      }
-      const updated = await prisma.$transaction(async (tx) => {
-        await tx.asset.create({
-          data: {
-            userId,
-            brandId: existing.brandId,
-            url: result.imageUrl!,
-            label: blueprint.intent?.headline?.slice(0, 40) || existing.label,
-            type: existing.type,
-            width: result.width,
-            height: result.height,
-            prompt: result.finalPrompt,
-            aspectRatio: blueprint.aspectRatio,
-            model: (process.env.REPLICATE_API_TOKEN ?? process.env.REPLICATE_API_KEY ?? "").trim() ? "replicate/flux" : "emergent-backend",
-            sourceIdea: existing.sourceIdea,
-            brandSnapshot: existing.brandSnapshot,
-            blueprint: JSON.stringify(result.blueprint),
-            finalPrompt: result.finalPrompt,
-            ideaType: blueprint.ideaType,
-            backgroundUrl: result.backgroundUrl ?? null,
-            finalImageUrl: result.finalImageUrl ?? null,
-            objective: result.campaignStrategy?.objective ?? null,
-            messagingFramework: result.campaignStrategy?.messagingFramework ?? null,
-            emotionalTone: result.campaignStrategy?.emotionalTone ?? null,
-          } as Prisma.AssetUncheckedCreateInput,
-        });
-        await tx.user.update({ where: { id: userId }, data: { credits: { decrement: 1 } } });
-        return tx.user.findUnique({ where: { id: userId }, select: { credits: true } });
-      });
-      return NextResponse.json({
-        assets: [{
-          id: "1",
-          url: result.imageUrl,
-          label: blueprint.intent?.headline?.slice(0, 40) || "Regenerated",
-          type: existing.type,
-          width: result.width,
-          height: result.height,
-        }],
-        credits: updated?.credits ?? 0,
-      });
-    }
-
-    // Resolve brand: from DB by brandId or from body
-    let brandData: BrandInput | null = null;
-    let ownedBrandId: string | null = null;
-    let isBrandLockEnabled = false;
-    let designConstraints: ReturnType<typeof parseDesignConstraints> = null;
-
-    if (brandId) {
-      const owned = await prisma.brand.findFirst({
-        where: { id: brandId, userId },
-        select: {
-          id: true,
-          name: true,
-          tagline: true,
-          description: true,
-          colors: true,
-          fonts: true,
-          logos: true,
-          personality: true,
-          tone: true,
-          visualStyle: true,
-          primaryColor: true,
-          secondaryColors: true,
-          headingFont: true,
-          bodyFont: true,
-          toneOfVoice: true,
-          personalityTraits: true,
-          deepAnalysis: true,
-          strategyProfile: true,
-          isBrandLockEnabled: true,
-          designConstraints: true,
-        } as Prisma.BrandSelect,
-      });
-      if (!owned) {
-        return NextResponse.json({ error: "Invalid brand selection for this user." }, { status: 403 });
-      }
-      ownedBrandId = owned.id;
-      let strategy: Record<string, unknown> | null = null;
-      try {
-        if (owned.strategyProfile) strategy = JSON.parse(owned.strategyProfile as string) as Record<string, unknown>;
-      } catch {
-        // ignore
-      }
-      const bi = brandRowToIntelligence(owned as Parameters<typeof brandRowToIntelligence>[0]);
-      brandData = {
-        name: owned.name,
-        tagline: owned.tagline ?? undefined,
-        description: owned.description ?? undefined,
-        colors: brandIntelligenceColors(bi),
-        fonts: brandIntelligenceFonts(bi).length ? brandIntelligenceFonts(bi) : undefined,
-        logos: owned.logos ? (typeof owned.logos === "string" ? JSON.parse(owned.logos) : owned.logos) : undefined,
-        personality: brandIntelligencePersonalityString(bi) ?? undefined,
-        tone: bi.toneOfVoice ?? undefined,
-        visualStyleSummary: bi.visualStyle ?? undefined,
-        strategyProfile: strategy ?? undefined,
-      };
-      isBrandLockEnabled = !!(owned as { isBrandLockEnabled?: boolean }).isBrandLockEnabled;
-      designConstraints = parseDesignConstraints((owned as { designConstraints?: string | null }).designConstraints);
-    }
-
-    if (!brandData && brandBody && (brandBody.name || (brandBody.colors && brandBody.colors.length))) {
-      brandData = brandBody;
-      if (brandId) ownedBrandId = brandId;
-    }
-
-    // Require either url (legacy) or brand data
-    if (!url && !brandData) {
-      return NextResponse.json({ error: "Missing url or brand (or brandId)." }, { status: 400 });
-    }
-
-    const ideaType = (typeof ideaTypeParam === "string" && ideaTypeParam.trim()) ? ideaTypeParam.trim() : "custom";
-    const userPrompt = typeof promptOverride === "string" ? promptOverride.trim() : "";
-    const numToGenerate = Math.min(4, Math.max(1, Number(limitParam) || 1));
-
-    // Credits check
-    const u = await prisma.user.findUnique({ where: { id: userId } });
-    if (!u || u.credits < numToGenerate) {
-      return NextResponse.json(
-        { error: `Not enough credits. You have ${u?.credits ?? 0}; need ${numToGenerate}.` },
+        { error: "You're out of credits. Please upgrade your plan." },
         { status: 402 }
       );
     }
 
-    const orchestratorBrand = toOrchestratorBrand(brandData);
-    const sessionId = `brandbloom-${Date.now()}`;
-    const logoUrl = (brandData?.logos && Array.isArray(brandData.logos) && brandData.logos[0]) ? String(brandData.logos[0]) : null;
+    const body = await request.json().catch(() => ({})) as {
+      url?: string;
+      brand?: BrandInput;
+      brandId?: string;
+      promptOverride?: string;
+      ideaType?: string;
+      aspectRatio?: string;
+      limit?: number;
+      quality?: "standard" | "quality" | "4k";
+    };
 
-    let campaignMemoryHint: string | null = null;
-    if (ownedBrandId) {
-      try {
-        const memory = await getCampaignMemory(ownedBrandId);
-        if (memory.assetCount > 0) {
-          const recent = [
-            memory.objectives.slice(0, 3).join(", "),
-            memory.messagingFrameworks.slice(0, 3).join(", "),
-          ].filter(Boolean);
-          if (recent.length) campaignMemoryHint = `Recent: ${recent.join("; ")}. Prefer variety when appropriate.`;
-        }
-      } catch {
-        // ignore
-      }
-    }
+    const {
+      brand,
+      brandId,
+      promptOverride,
+      ideaType,
+      aspectRatio = "1:1",
+      limit = 1,
+      quality = "standard",
+    } = body;
 
-    const assets: GeneratedAsset[] = [];
-    const generationMeta: Array<{
-      blueprint: Record<string, unknown>;
-      finalPrompt: string;
-      ideaType: string;
-      width: number;
-      height: number;
-      type: "social" | "ad" | "thumbnail" | "banner";
-      label: string;
-      backgroundUrl?: string | null;
-      finalImageUrl?: string | null;
-      campaignStrategy?: { objective: string | null; messagingFramework: string | null; emotionalTone: string | null };
-    }> = [];
+    const prompt = buildGenerationPrompt(brand, promptOverride, ideaType);
+    const resolvedAspect = aspectRatio === "__auto__" ? "1:1" : aspectRatio;
+    const size = (quality === "4k" ? aspectRatioToSize4K : aspectRatioToSize)(resolvedAspect);
 
-    for (let i = 0; i < numToGenerate; i++) {
-      const result = await runGenerationPipeline({
-        brand: orchestratorBrand,
-        ideaType: i === 0 ? ideaType : "custom",
-        userPrompt: i === 0 ? userPrompt : "",
-        brandLock: false,
-        logoImageUrl: logoUrl,
-        sessionId: `${sessionId}-${i}`,
-        isBrandLockEnabled,
-        designConstraints: designConstraints ?? undefined,
-        campaignMemoryHint: campaignMemoryHint ?? undefined,
-      });
+    const hasToken = !!process.env.REPLICATE_API_TOKEN;
+    const results = [];
+    let replicateAttempted = false;
+    let demo = false;
 
-      const imageUrl = result.imageUrl;
-      if (imageUrl) {
-        const assetType = ideaTypeToAssetType(result.ideaType);
-        const label = result.blueprint.intent?.headline?.slice(0, 40) || result.ideaType.replace(/_/g, " ") || "Asset";
-        assets.push({
-          id: String(assets.length + 1),
-          url: imageUrl,
-          label,
-          type: assetType,
-          width: result.width,
-          height: result.height,
-        });
-        generationMeta.push({
-          blueprint: result.blueprint as unknown as Record<string, unknown>,
-          finalPrompt: result.finalPrompt,
-          ideaType: result.ideaType,
-          width: result.width,
-          height: result.height,
-          type: assetType,
-          label,
-          backgroundUrl: result.backgroundUrl ?? undefined,
-          finalImageUrl: result.finalImageUrl ?? undefined,
-          campaignStrategy: result.campaignStrategy,
-        });
-      }
-    }
+    // Determine effective quality — use 'quality' model for 4k too
+    const replicateQuality: "standard" | "quality" | "4k" =
+      quality === "4k" ? "4k" : quality;
 
-    if (assets.length > 0 && userId) {
-      const hasReplicate = !!(process.env.REPLICATE_API_TOKEN ?? process.env.REPLICATE_API_KEY ?? "").trim();
-      const updated = await prisma.$transaction(async (tx) => {
-        for (let i = 0; i < assets.length; i++) {
-          const a = assets[i];
-          const m = generationMeta[i];
-          await tx.asset.create({
-            data: {
-              userId,
-              brandId: ownedBrandId,
-              url: a.url,
-              label: a.label,
-              type: a.type,
-              width: a.width,
-              height: a.height,
-              prompt: m?.finalPrompt ?? null,
-              aspectRatio: m?.blueprint?.aspectRatio ? String(m.blueprint.aspectRatio) : null,
-              model: hasReplicate ? "replicate/flux" : "emergent-backend",
-              sourceIdea: m?.label ?? null,
-              brandSnapshot: brandData ? JSON.stringify(brandData) : null,
-              blueprint: JSON.stringify(m?.blueprint ?? {}),
-              finalPrompt: m?.finalPrompt ?? null,
-              ideaType: m?.ideaType ?? null,
-              backgroundUrl: m?.backgroundUrl ?? null,
-              finalImageUrl: m?.finalImageUrl ?? null,
-              objective: m?.campaignStrategy?.objective ?? null,
-              messagingFramework: m?.campaignStrategy?.messagingFramework ?? null,
-              emotionalTone: m?.campaignStrategy?.emotionalTone ?? null,
-            } as Prisma.AssetUncheckedCreateInput,
+    for (let i = 0; i < Math.min(limit, 4); i++) {
+      if (hasToken) {
+        replicateAttempted = true;
+        const result = await generateWithReplicate(prompt, resolvedAspect, replicateQuality);
+        if (result) {
+          results.push({
+            id: `${Date.now()}-${i}`,
+            url: result.url,
+            label: promptOverride?.slice(0, 50) ?? ideaType ?? "Brand asset",
+            type: ideaType ?? "general",
+            width: result.width,
+            height: result.height,
+            prompt,
+          });
+        } else {
+          // Replicate attempted but failed — use demo
+          demo = true;
+          results.push({
+            id: `demo-${Date.now()}-${i}`,
+            url: getDemoImage(size.width, size.height, `${brand?.name ?? "brand"}-${i}`),
+            label: promptOverride?.slice(0, 50) ?? ideaType ?? "Brand asset (placeholder)",
+            type: ideaType ?? "general",
+            width: size.width,
+            height: size.height,
+            prompt,
           });
         }
-        await tx.user.update({
-          where: { id: userId },
-          data: { credits: { decrement: assets.length } },
+      } else {
+        demo = true;
+        results.push({
+          id: `demo-${Date.now()}-${i}`,
+          url: getDemoImage(size.width, size.height, `${brand?.name ?? "brand"}-${i}`),
+          label: promptOverride?.slice(0, 50) ?? ideaType ?? "Brand asset (placeholder)",
+          type: ideaType ?? "general",
+          width: size.width,
+          height: size.height,
+          prompt,
         });
-        return tx.user.findUnique({
-          where: { id: userId },
-          select: { credits: true },
-        });
-      });
-      return NextResponse.json({ assets, credits: updated?.credits ?? 0 });
+      }
     }
 
-    if (assets.length > 0) return NextResponse.json({ assets });
+    // Deduct credit(s)
+    let remainingCredits: number | undefined;
+    const creditCost = quality === "4k" ? 2 : 1;
+    if (!demo) {
+      try {
+        const updated = await prisma.user.update({
+          where: { id: authUser.id },
+          data: { credits: { decrement: creditCost * results.filter((r) => !r.id.startsWith("demo")).length } },
+          select: { credits: true },
+        });
+        remainingCredits = updated.credits;
+      } catch { /* non-fatal */ }
+    }
 
-    // Demo fallback when no image URL returned
-    const demoLabel = ideaType.replace(/_/g, " ") || "Custom";
-    const demoAssets: GeneratedAsset[] = [{
-      id: "1",
-      url: `https://placehold.co/1024x1024/1c1917/ea751d?text=${encodeURIComponent(demoLabel)}`,
-      label: demoLabel,
-      type: "social",
-      width: 1024,
-      height: 1024,
-    }];
-    return NextResponse.json({ assets: demoAssets, demo: true });
+    // Save assets to DB
+    if (brandId && results.length > 0) {
+      const toSave = results.filter((r) => !r.id.startsWith("demo"));
+      if (toSave.length > 0) {
+        await prisma.asset.createMany({
+          data: toSave.map((r) => ({
+            brandId,
+            userId: authUser.id,
+            url: r.url,
+            label: r.label,
+            type: r.type,
+            width: r.width,
+            height: r.height,
+            prompt: r.prompt,
+          })),
+          skipDuplicates: true,
+        }).catch(() => { /* non-fatal */ });
+      }
+    }
+
+    return NextResponse.json({
+      assets: results,
+      demo,
+      replicateAttempted,
+      credits: remainingCredits,
+    });
   } catch (e) {
-    console.error("generate-assets error:", e);
-    return NextResponse.json({ error: "Asset generation failed" }, { status: 500 });
+    console.error("[generate-assets] error:", e);
+    return NextResponse.json(
+      { error: "Asset generation failed. Please try again." },
+      { status: 500 }
+    );
   }
 }
