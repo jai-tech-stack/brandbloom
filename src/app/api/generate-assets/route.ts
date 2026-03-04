@@ -21,72 +21,156 @@ type BrandInput = {
   values?: string[];
 };
 
-/**
- * Build a rich brand-aware generation prompt.
- * This is the single most important function — every quality issue in generated
- * images traces back to a weak prompt. Be as specific as possible.
- */
-import { sendLowCreditsEmail } from "@/lib/email";
+// ─── 1. Ask Python AssetCreatorAgent to build the prompt ─────────────────────
+// This is the key upgrade — instead of weak string concat, we send the full
+// brand profile to the Python agent which uses Claude to write a rich,
+// brand-specific Flux prompt.
+async function buildPromptViaAgent(
+  brand: BrandInput,
+  assetType: string,
+  dimensions: string,
+  userPrompt?: string
+): Promise<string | null> {
+  const agenticUrl = process.env.PYTHON_AGENTIC_URL || process.env.PYTHON_BACKEND_URL;
+  if (!agenticUrl) return null;
 
-function buildGenerationPrompt(
-  brand: BrandInput | undefined,
-  promptOverride: string | undefined,
-  ideaType: string | undefined
-): string {
-  const baseParts: string[] = [];
+  try {
+    // Build the brand profile in the shape the Python agent expects
+    const brandProfile = {
+      name: brand.name,
+      primary_colors: brand.colors?.slice(0, 3) ?? [],
+      secondary_colors: brand.colors?.slice(3, 6) ?? [],
+      fonts: brand.fonts ?? [],
+      style: brand.visualStyleSummary ?? brand.aestheticNarrative ?? "",
+      mood: brand.toneKeywords?.length
+        ? brand.toneKeywords
+        : [brand.tone, brand.personality].filter(Boolean),
+      description: brand.description ?? "",
+      target_audience: brand.targetAudience ?? "",
+      tagline: brand.tagline ?? "",
+    };
 
-  // User's specific request takes precedence
-  if (promptOverride?.trim()) {
-    baseParts.push(promptOverride.trim());
+    const res = await fetch(`${agenticUrl}/api/agentic/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        request_type: "create_asset",
+        payload: {
+          brand_profile: brandProfile,
+          asset_type: assetType,
+          dimensions,
+          copy_text: userPrompt ?? null,
+        },
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json() as { prompt?: string; error?: string };
+    return data.prompt?.trim() || null;
+  } catch (e) {
+    console.warn("[generate-assets] Agent prompt failed, falling back:", (e as Error).message);
+    return null;
   }
-
-  // Brand name context
-  if (brand?.name?.trim()) {
-    baseParts.push(`for ${brand.name}`);
-  }
-
-  // Aesthetic narrative — most valuable for style adherence
-  if (brand?.aestheticNarrative?.trim()) {
-    baseParts.push(brand.aestheticNarrative.trim());
-  }
-
-  // Visual style summary
-  if (brand?.visualStyleSummary?.trim()) {
-    baseParts.push(brand.visualStyleSummary.trim());
-  }
-
-  // Colors — very specific hex values guide the model well
-  if (brand?.colors?.length) {
-    const colorList = brand.colors.slice(0, 4).join(", ");
-    baseParts.push(`using brand colors ${colorList}`);
-  }
-
-  // Tone/personality
-  if (brand?.tone?.trim() || brand?.personality?.trim()) {
-    const toneStr = [brand.tone, brand.personality].filter(Boolean).join(", ");
-    baseParts.push(`${toneStr} aesthetic`);
-  } else if (brand?.toneKeywords?.length) {
-    baseParts.push(brand.toneKeywords.slice(0, 3).join(", ") + " feel");
-  }
-
-  // Description (brief)
-  if (brand?.description?.trim()) {
-    const shortDesc = brand.description.trim().split(".")[0];
-    if (shortDesc.length > 10 && shortDesc.length < 120) {
-      baseParts.push(shortDesc);
-    }
-  }
-
-  // Quality suffix — always append these for professional results
-  const qualitySuffix = "professional commercial design, polished, high quality, brand-consistent, photorealistic or editorial style";
-
-  const prompt = baseParts.join(". ");
-  return prompt ? `${prompt}. ${qualitySuffix}` : `Professional branded marketing image. ${qualitySuffix}`;
 }
 
-/**
- * Convert aspect ratio string to width/height for Replicate.
- */
+// ─── 2. Local fallback prompt builder (used if Python backend is down) ────────
+// Much richer than before — forces specific hex colors, named fonts, visual style.
+function buildFallbackPrompt(
+  brand: BrandInput | undefined,
+  userPrompt: string | undefined,
+  assetType: string | undefined,
+  dimensions: string
+): string {
+  const parts: string[] = [];
+
+  // Asset type context first
+  const typeDescriptions: Record<string, string> = {
+    social: "professional social media post graphic",
+    ad: "high-converting advertisement creative",
+    banner: "wide banner advertisement",
+    thumbnail: "bold click-worthy thumbnail",
+    story: "vertical story graphic 9:16 format",
+    email: "email header banner",
+    "Instagram Post": "Instagram feed post, square format",
+    "Instagram Story": "Instagram story, vertical 9:16",
+    "LinkedIn Post": "LinkedIn professional post graphic",
+    "YouTube Thumbnail": "YouTube thumbnail, bold and high contrast",
+    "Display Ad": "display banner ad, conversion-focused",
+    "Hero Product Shot": "hero product photography, studio lighting",
+    "Blog Hero Image": "editorial blog header image",
+  };
+  const typeDesc = assetType ? (typeDescriptions[assetType] ?? `${assetType} graphic`) : "marketing visual";
+  parts.push(typeDesc);
+
+  // User's specific instruction
+  if (userPrompt?.trim()) {
+    parts.push(userPrompt.trim());
+  }
+
+  // Brand name
+  if (brand?.name) parts.push(`for brand "${brand.name}"`);
+
+  // COLORS — the most impactful part for non-generic results
+  if (brand?.colors?.length) {
+    const hexList = brand.colors.slice(0, 4).join(", ");
+    parts.push(`strictly use these exact brand colors: ${hexList}`);
+    parts.push(`dominant color palette: ${brand.colors[0]} as primary, ${brand.colors[1] ?? brand.colors[0]} as accent`);
+  }
+
+  // TYPOGRAPHY
+  if (brand?.fonts?.length) {
+    parts.push(`typography using ${brand.fonts.slice(0, 2).join(" and ")} fonts`);
+  }
+
+  // VISUAL STYLE — aesthetic narrative is the richest signal
+  if (brand?.aestheticNarrative?.trim()) {
+    parts.push(brand.aestheticNarrative.trim());
+  } else if (brand?.visualStyleSummary?.trim()) {
+    parts.push(`visual style: ${brand.visualStyleSummary.trim()}`);
+  }
+
+  // TONE
+  const toneArr = [
+    ...(brand?.toneKeywords ?? []),
+    brand?.tone,
+    brand?.personality,
+  ].filter(Boolean).slice(0, 4) as string[];
+  if (toneArr.length) {
+    parts.push(`${toneArr.join(", ")} aesthetic and mood`);
+  }
+
+  // DESCRIPTION context
+  if (brand?.description?.trim()) {
+    const short = brand.description.trim().split(".")[0];
+    if (short.length > 10 && short.length < 150) parts.push(short);
+  }
+
+  // Tagline
+  if (brand?.tagline?.trim()) {
+    parts.push(`brand tagline: "${brand.tagline}"`);
+  }
+
+  // Dimensions hint
+  const [w, h] = dimensions.split("x").map(Number);
+  if (w && h) {
+    parts.push(w > h ? "landscape horizontal composition" : w < h ? "portrait vertical composition" : "square composition");
+  }
+
+  // Quality suffix — forces professional output
+  parts.push(
+    "professional commercial design",
+    "polished and high quality",
+    "brand-consistent visual identity",
+    "sharp details",
+    "award-winning graphic design",
+    "no text overlays unless specified",
+  );
+
+  return parts.join(". ");
+}
+
+// ─── 3. Replicate image generation ───────────────────────────────────────────
 function aspectRatioToSize(ratio: string): { width: number; height: number } {
   const map: Record<string, { width: number; height: number }> = {
     "1:1": { width: 1024, height: 1024 },
@@ -104,25 +188,21 @@ function aspectRatioToSize(ratio: string): { width: number; height: number } {
   return map[ratio] ?? { width: 1024, height: 1024 };
 }
 
-/**
- * 4K size — double resolution
- */
 function aspectRatioToSize4K(ratio: string): { width: number; height: number } {
   const base = aspectRatioToSize(ratio);
-  // Replicate max is typically 2048 for flux-1.1-pro
   const scale = Math.min(2048 / Math.max(base.width, base.height), 2);
   return {
-    width: Math.round(base.width * scale / 64) * 64,
-    height: Math.round(base.height * scale / 64) * 64,
+    width: Math.round((base.width * scale) / 64) * 64,
+    height: Math.round((base.height * scale) / 64) * 64,
   };
 }
 
-/**
- * Generate image via Replicate Flux.
- * Standard: flux-schnell (fast, cheap)
- * Quality: flux-1.1-pro (better quality)
- * 4K: flux-1.1-pro with higher resolution
- */
+// Dimensions string for agent e.g. "1024x1024"
+function dimensionsString(ratio: string, quality: string): string {
+  const size = quality === "4k" ? aspectRatioToSize4K(ratio) : aspectRatioToSize(ratio);
+  return `${size.width}x${size.height}`;
+}
+
 async function generateWithReplicate(
   prompt: string,
   aspectRatio: string,
@@ -133,14 +213,9 @@ async function generateWithReplicate(
 
   const is4k = quality === "4k";
   const isQuality = quality === "quality" || quality === "4k";
-
-  // Model selection:
-  // - flux-schnell: fast, good for drafts
-  // - flux-1.1-pro: higher quality, slower, better for final assets + 4K
   const model = isQuality
     ? "black-forest-labs/flux-1.1-pro"
     : "black-forest-labs/flux-schnell";
-
   const size = is4k ? aspectRatioToSize4K(aspectRatio) : aspectRatioToSize(aspectRatio);
 
   const input: Record<string, unknown> = {
@@ -153,84 +228,91 @@ async function generateWithReplicate(
   };
 
   if (isQuality) {
-    // flux-1.1-pro specific params
     input.prompt_upsampling = true;
     input.safety_tolerance = 2;
   } else {
-    // flux-schnell specific
     input.num_inference_steps = 4;
     input.go_fast = true;
   }
 
   try {
-    const createRes = await fetch("https://api.replicate.com/v1/models/" + model + "/predictions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        Prefer: "wait=30",
-      },
-      body: JSON.stringify({ input }),
-    });
+    const createRes = await fetch(
+      `https://api.replicate.com/v1/models/${model}/predictions`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Prefer: "wait=30",
+        },
+        body: JSON.stringify({ input }),
+      }
+    );
 
     if (!createRes.ok) {
-      const err = await createRes.text();
-      console.warn("[generate-assets] Replicate error:", err);
+      console.warn("[generate-assets] Replicate error:", await createRes.text());
       return null;
     }
 
     const prediction = await createRes.json() as {
-      id?: string;
-      status?: string;
-      output?: string | string[];
-      error?: string;
+      id?: string; status?: string;
+      output?: string | string[]; error?: string;
       urls?: { get?: string };
     };
 
-    if (prediction.error) {
-      console.warn("[generate-assets] Replicate prediction error:", prediction.error);
-      return null;
-    }
+    if (prediction.error) return null;
 
-    // Completed immediately
     if (prediction.status === "succeeded" && prediction.output) {
-      const out = prediction.output;
-      const url = Array.isArray(out) ? out[0] : out;
+      const url = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
       return { url, width: size.width, height: size.height };
     }
 
-    // Poll
     if (prediction.id && prediction.urls?.get) {
-      const pollUrl = prediction.urls.get;
-      for (let attempt = 0; attempt < 30; attempt++) {
+      for (let i = 0; i < 30; i++) {
         await new Promise((r) => setTimeout(r, 2000));
-        const poll = await fetch(pollUrl, { headers: { Authorization: `Bearer ${token}` } });
+        const poll = await fetch(prediction.urls.get!, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         const result = await poll.json() as { status?: string; output?: string | string[]; error?: string };
-
         if (result.status === "succeeded" && result.output) {
-          const out = result.output;
-          const url = Array.isArray(out) ? out[0] : out;
+          const url = Array.isArray(result.output) ? result.output[0] : result.output;
           return { url, width: size.width, height: size.height };
         }
-        if (result.status === "failed" || result.error) {
-          console.warn("[generate-assets] Poll failed:", result.error);
-          return null;
-        }
+        if (result.status === "failed" || result.error) return null;
       }
     }
-
     return null;
   } catch (e) {
-    console.error("[generate-assets] Replicate call failed:", (e as Error).message);
+    console.error("[generate-assets] Replicate failed:", (e as Error).message);
     return null;
   }
 }
 
-/** Demo/placeholder image for when Replicate is not configured */
+// ─── 4. Gemini via Python server.py ──────────────────────────────────────────
+async function generateWithGemini(prompt: string): Promise<string | null> {
+  const backendUrl = process.env.PYTHON_BACKEND_URL;
+  if (!backendUrl) return null;
+  try {
+    const res = await fetch(`${backendUrl}/api/generate-image`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, session_id: `bb-${Date.now()}` }),
+      signal: AbortSignal.timeout(55_000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { success?: boolean; image_url?: string };
+    return data.success && data.image_url ? data.image_url : null;
+  } catch (e) {
+    console.warn("[generate-assets] Gemini failed:", (e as Error).message);
+    return null;
+  }
+}
+
 function getDemoImage(width: number, height: number, label: string): string {
   return `https://picsum.photos/seed/${encodeURIComponent(label)}/${width}/${height}`;
 }
 
+// ─── 5. Main handler ──────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
     const authUser = await resolveAuthUser(request);
@@ -238,10 +320,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Sign in required." }, { status: 401 });
     }
 
-    // Check credits
     const userRecord = await prisma.user.findUnique({
       where: { id: authUser.id },
-      select: { credits: true },
+      select: { credits: true, name: true, email: true },
     }).catch(() => null);
 
     if (userRecord && typeof userRecord.credits === "number" && userRecord.credits < 1) {
@@ -272,46 +353,65 @@ export async function POST(request: NextRequest) {
       quality = "standard",
     } = body;
 
-    const prompt = buildGenerationPrompt(brand, promptOverride, ideaType);
     const resolvedAspect = aspectRatio === "__auto__" ? "1:1" : aspectRatio;
+    const dims = dimensionsString(resolvedAspect, quality);
     const size = (quality === "4k" ? aspectRatioToSize4K : aspectRatioToSize)(resolvedAspect);
 
-    const hasToken = !!process.env.REPLICATE_API_TOKEN;
+    // ── Build prompt: try Python agent first, fall back to local ──────────────
+    let prompt: string | null = null;
+
+    if (brand) {
+      // Try the AssetCreatorAgent (Claude-powered, brand-aware)
+      prompt = await buildPromptViaAgent(brand, ideaType ?? "social", dims, promptOverride);
+      if (prompt) {
+        console.info("[generate-assets] Using agent-built prompt for", brand.name);
+      }
+    }
+
+    // Fallback: local rich prompt builder
+    if (!prompt) {
+      prompt = buildFallbackPrompt(brand, promptOverride, ideaType, dims);
+      console.info("[generate-assets] Using fallback prompt");
+    }
+
+    const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
+    const hasGemini = !!process.env.PYTHON_BACKEND_URL;
     const results = [];
     let replicateAttempted = false;
     let demo = false;
-
-    // Determine effective quality — use 'quality' model for 4k too
-    const replicateQuality: "standard" | "quality" | "4k" =
-      quality === "4k" ? "4k" : quality;
+    const replicateQuality: "standard" | "quality" | "4k" = quality === "4k" ? "4k" : quality;
 
     for (let i = 0; i < Math.min(limit, 4); i++) {
-      if (hasToken) {
+      let imageUrl: string | null = null;
+      let imgWidth = size.width;
+      let imgHeight = size.height;
+
+      // Try Replicate first (higher quality Flux model)
+      if (hasReplicate) {
         replicateAttempted = true;
         const result = await generateWithReplicate(prompt, resolvedAspect, replicateQuality);
         if (result) {
-          results.push({
-            id: `${Date.now()}-${i}`,
-            url: result.url,
-            label: promptOverride?.slice(0, 50) ?? ideaType ?? "Brand asset",
-            type: ideaType ?? "general",
-            width: result.width,
-            height: result.height,
-            prompt,
-          });
-        } else {
-          // Replicate attempted but failed — use demo
-          demo = true;
-          results.push({
-            id: `demo-${Date.now()}-${i}`,
-            url: getDemoImage(size.width, size.height, `${brand?.name ?? "brand"}-${i}`),
-            label: promptOverride?.slice(0, 50) ?? ideaType ?? "Brand asset (placeholder)",
-            type: ideaType ?? "general",
-            width: size.width,
-            height: size.height,
-            prompt,
-          });
+          imageUrl = result.url;
+          imgWidth = result.width;
+          imgHeight = result.height;
         }
+      }
+
+      // Fall back to Gemini via Python server.py
+      if (!imageUrl && hasGemini) {
+        imageUrl = await generateWithGemini(prompt);
+      }
+
+      if (imageUrl) {
+        results.push({
+          id: `${Date.now()}-${i}`,
+          url: imageUrl,
+          label: promptOverride?.slice(0, 50) ?? ideaType ?? "Brand asset",
+          type: ideaType ?? "general",
+          width: imgWidth,
+          height: imgHeight,
+          prompt,
+        });
       } else {
         demo = true;
         results.push({
@@ -326,19 +426,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Deduct credit(s)
+    // Deduct credits
     let remainingCredits: number | undefined;
     const creditCost = quality === "4k" ? 2 : 1;
     if (!demo) {
       try {
         const updated = await prisma.user.update({
           where: { id: authUser.id },
-          data: { credits: { decrement: creditCost * results.filter((r) => !r.id.startsWith("demo")).length } },
+          data: {
+            credits: {
+              decrement: creditCost * results.filter((r) => !r.id.startsWith("demo")).length,
+            },
+          },
           select: { credits: true },
         });
         remainingCredits = updated.credits;
-        if (remainingCredits === 3 && authUser.email) {
-          sendLowCreditsEmail({ to: authUser.email, name: authUser.name ?? undefined, credits: 3 }).catch(console.error);
+
+        // Low credit warning email at exactly 3 credits
+        if (remainingCredits === 3 && userRecord?.email) {
+          import("@/lib/email").then(({ sendLowCreditsEmail }) => {
+            sendLowCreditsEmail({
+              to: userRecord.email!,
+              name: userRecord.name ?? undefined,
+              credits: 3,
+            }).catch(() => { /* non-fatal */ });
+          }).catch(() => { /* non-fatal */ });
         }
       } catch { /* non-fatal */ }
     }
@@ -357,6 +469,7 @@ export async function POST(request: NextRequest) {
             width: r.width,
             height: r.height,
             prompt: r.prompt,
+            status: "complete",
           })),
           skipDuplicates: true,
         }).catch(() => { /* non-fatal */ });
@@ -368,6 +481,7 @@ export async function POST(request: NextRequest) {
       demo,
       replicateAttempted,
       credits: remainingCredits,
+      promptUsed: prompt, // useful for debugging
     });
   } catch (e) {
     console.error("[generate-assets] error:", e);
