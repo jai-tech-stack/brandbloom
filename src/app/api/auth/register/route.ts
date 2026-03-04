@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { DEFAULT_CREDITS } from "@/lib/credits";
+import { sendWelcomeEmail } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,6 +50,9 @@ export async function POST(request: NextRequest) {
         credits: DEFAULT_CREDITS,
       },
     });
+
+    const displayName = typeof name === "string" ? name.trim().slice(0, 100) : undefined;
+    sendWelcomeEmail({ to: trimmedEmail, name: displayName ?? undefined }).catch(console.error);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

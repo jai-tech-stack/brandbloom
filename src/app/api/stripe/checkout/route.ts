@@ -1,53 +1,50 @@
+// src/app/api/stripe/checkout/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import Stripe from "stripe";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/db";
-import { getStripeCreditsAmount } from "@/lib/credits";
+import { resolveAuthUser } from "@/lib/resolve-auth-user";
 
-const stripe = process.env.STRIPE_SECRET_KEY
-  ? new Stripe(process.env.STRIPE_SECRET_KEY)
-  : null;
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "", {
+  apiVersion: "2025-02-24.acacia",
+});
 
-const CREDITS_PRICE_ID = process.env.STRIPE_CREDITS_PRICE_ID ?? "";
-
-export async function GET(request: NextRequest) {
-  if (!stripe || !CREDITS_PRICE_ID) {
-    const origin = request.nextUrl?.origin ?? new URL(request.url).origin;
-    return NextResponse.redirect(`${origin}/`);
-  }
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
-  });
-  if (!user) {
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
-
-  const origin = request.nextUrl?.origin ?? new URL(request.url).origin;
+export async function POST(request: NextRequest) {
   try {
-    const checkoutSession = await stripe.checkout.sessions.create({
-      mode: "payment",
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price: CREDITS_PRICE_ID,
-          quantity: 1,
-        },
-      ],
-      success_url: `${origin}/?credits=added`,
-      cancel_url: `${origin}/`,
-      client_reference_id: user.id,
-      metadata: { credits: String(getStripeCreditsAmount()), userId: user.id },
-    });
-    if (checkoutSession.url) {
-      return NextResponse.redirect(checkoutSession.url);
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return NextResponse.json({ error: "Stripe is not configured." }, { status: 500 });
     }
+
+    const authUser = await resolveAuthUser(request);
+    if (!authUser) {
+      return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+    }
+
+    const body = await request.json().catch(() => ({})) as { priceId?: string; mode?: string };
+    const { priceId, mode } = body;
+
+    if (!priceId) {
+      return NextResponse.json({ error: "Price ID required." }, { status: 400 });
+    }
+
+    const checkoutMode = mode === "subscription" ? "subscription" : "payment";
+    const origin = request.headers.get("origin") ?? process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+
+    const session = await stripe.checkout.sessions.create({
+      mode: checkoutMode,
+      line_items: [{ price: priceId, quantity: 1 }],
+      customer_email: authUser.email,
+      metadata: {
+        userId: authUser.id,
+        userEmail: authUser.email,
+      },
+      success_url: `${origin}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/pricing?cancelled=1`,
+      allow_promotion_codes: true,
+    });
+
+    return NextResponse.json({ url: session.url });
   } catch (e) {
-    console.error("Stripe checkout error:", e);
+    console.error("[stripe/checkout] error:", e);
+    const msg = e instanceof Error ? e.message : "Checkout failed.";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
-  return NextResponse.redirect(`${origin}/`);
 }

@@ -26,6 +26,8 @@ type BrandInput = {
  * This is the single most important function — every quality issue in generated
  * images traces back to a weak prompt. Be as specific as possible.
  */
+import { sendLowCreditsEmail } from "@/lib/email";
+
 function buildGenerationPrompt(
   brand: BrandInput | undefined,
   promptOverride: string | undefined,
@@ -335,6 +337,9 @@ export async function POST(request: NextRequest) {
           select: { credits: true },
         });
         remainingCredits = updated.credits;
+        if (remainingCredits === 3 && authUser.email) {
+          sendLowCreditsEmail({ to: authUser.email, name: authUser.name ?? undefined, credits: 3 }).catch(console.error);
+        }
       } catch { /* non-fatal */ }
     }
 

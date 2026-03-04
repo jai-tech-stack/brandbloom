@@ -8,16 +8,17 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
+  id        String   @id @default(cuid())
+  email     String   @unique
   name      String?
-  password  String?   // hashed; for Credentials provider
-  credits   Int       @default(10)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  password  String?
+  credits   Int      @default(10)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   brands    Brand[]
   assets    Asset[]
   campaigns Campaign[]
+  passwordResetToken PasswordResetToken?   // ← ADD THIS LINE
 }
 
 model Brand {
@@ -125,4 +126,12 @@ model Asset {
   emotionalTone   String?   // campaign strategy: tone used for this asset
   performanceScore Float?   // campaign memory: optional performance metric
   createdAt       DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id      String   @id @default(cuid())
+  userId  String   @unique
+  token   String   @unique
+  expires DateTime
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
