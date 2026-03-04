@@ -116,7 +116,7 @@ Optional (app works without them, with limited features):
 
 The **Brand BLOOM+ API** (`backend/api/main.py`) is the agentic backend: brand extraction, logo, generations. Deploy it on Railway so the Next.js app can use it for full, accurate flows.
 
-1. **Railway:** New project → Deploy from repo. Use **Nixpacks** (default). No Dockerfile needed.
+1. **Railway:** New project → Deploy from repo. The repo uses **Docker** (root `Dockerfile`); `railway.json` sets `"builder": "DOCKERFILE"` so Railway builds the backend image from that file (no Nixpacks, no emergentintegrations).
 2. **Env on Railway:** Set `ANTHROPIC_API_KEY` (required for the backend). Optionally `FRONTEND_URL` = your Vercel URL.
 3. **After deploy:** Copy the Railway service URL (e.g. `https://your-app.up.railway.app`).
 4. **Vercel (Next.js app):** Add env var `BACKEND_BLOOM_URL` = that Railway URL (no trailing slash). Redeploy.
