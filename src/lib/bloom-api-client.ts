@@ -1,4 +1,4 @@
-/** Brand BLOOM+ API client (trybloom.ai-style). */
+/** Brand BLOOM+ API client (optional Python backend at BACKEND_BLOOM_URL). */
 const API_BASE = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000");
 
 export interface BrandProfile {

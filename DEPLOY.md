@@ -99,6 +99,7 @@ Optional (app works without them, with limited features):
 
 - `REPLICATE_API_TOKEN` — image generation
 - `OPENAI_API_KEY` — logo / AI flows
+- `BACKEND_BLOOM_URL` — full agentic backend (see Railway below) for accurate brand extraction
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` + `STRIPE_SECRET_KEY` + etc. — payments
 
 4. **Build command:** `prisma generate && next build` (or leave default if it already runs `prisma generate`).
@@ -108,6 +109,20 @@ Optional (app works without them, with limited features):
 
 - Set `NEXTAUTH_URL` to your real URL (e.g. `https://brandbloom.vercel.app`) and redeploy if you changed it.
 - In Neon dashboard you can run SQL or use Prisma Studio locally with `DATABASE_URL` pointing at Neon.
+
+---
+
+## Railway: agentic backend (full, accurate generations)
+
+The **Brand BLOOM+ API** (`backend/api/main.py`) is the agentic backend: brand extraction, logo, generations. Deploy it on Railway so the Next.js app can use it for full, accurate flows.
+
+1. **Railway:** New project → Deploy from repo. Use **Nixpacks** (default). No Dockerfile needed.
+2. **Env on Railway:** Set `ANTHROPIC_API_KEY` (required for the backend). Optionally `FRONTEND_URL` = your Vercel URL.
+3. **After deploy:** Copy the Railway service URL (e.g. `https://your-app.up.railway.app`).
+4. **Vercel (Next.js app):** Add env var `BACKEND_BLOOM_URL` = that Railway URL (no trailing slash). Redeploy.
+5. **Result:** Extract-brand will call the agentic backend for accurate extraction; images still use Replicate (set `REPLICATE_API_TOKEN` on Vercel).
+
+Build no longer installs `emergentintegrations`; the BLOOM+ API uses Anthropic only.
 
 ---
 

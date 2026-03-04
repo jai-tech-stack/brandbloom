@@ -2,7 +2,8 @@
 nixPkgs = ["python311", "python311Packages.pip"]
 
 [phases.install]
-cmds = ["pip install fastapi 'uvicorn[standard]' python-dotenv pydantic anthropic emergentintegrations --break-system-packages"]
+cmds = ["pip install -r backend/requirements.txt --break-system-packages"]
 
 [start]
-cmd = "uvicorn backend.server:app --host 0.0.0.0 --port $PORT"
+# Run the full agentic BLOOM+ API (brand extraction, logo, generations). No emergentintegrations needed.
+cmd = "cd backend && uvicorn api.main:app --host 0.0.0.0 --port $PORT"
