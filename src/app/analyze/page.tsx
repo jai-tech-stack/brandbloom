@@ -663,8 +663,18 @@ function AnalyzeContent() {
 
   useEffect(() => {
     if (status === "unauthenticated" && (url || brandIdParam)) {
-      const callback = url ? `/analyze?url=${encodeURIComponent(url)}` : brandIdParam ? `/analyze?brandId=${encodeURIComponent(brandIdParam)}&stage=${encodeURIComponent(stage ?? "review")}` : "/";
+      // Decode url first to prevent double-encoding when user returns from login
+      const rawUrl = url ? (() => { try { return decodeURIComponent(url); } catch { return url; } })() : "";
+      const callback = rawUrl
+        ? `/analyze?url=${encodeURIComponent(rawUrl)}`
+        : brandIdParam
+        ? `/analyze?brandId=${encodeURIComponent(brandIdParam)}&stage=${encodeURIComponent(stage ?? "review")}`
+        : "/";
       router.replace(`/login?callbackUrl=${encodeURIComponent(callback)}`);
+    }
+    // When user returns authenticated, allow extraction to run
+    if (status === "authenticated" && url) {
+      extractionStartedRef.current = false;
     }
   }, [status, url, brandIdParam, stage, router]);
 
@@ -696,7 +706,8 @@ function AnalyzeContent() {
       .catch(() => { /* silently ignore */ });
   }, [brandIdParam, status, stage]);
 
-  // URL-based extraction
+  // URL-based extraction — runs when authenticated and url param is present
+  // extractionStartedRef is reset in the auth useEffect above when user returns from login
   useEffect(() => {
     if (!url || status !== "authenticated" || !!brandIdParam) return;
 

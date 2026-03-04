@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -35,8 +35,37 @@ const PROC_STEPS = [
 
 export default function CreateBrandPage() {
   const router = useRouter();
+  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const [step, setStep] = useState<Step>("upload");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Restore state when user returns from login with ?resume=1
+  const resumedRef = useRef(false);
+  useEffect(() => {
+    if (resumedRef.current) return;
+    const isResume = new URLSearchParams(window.location.search).get("resume") === "1";
+    if (!isResume) return;
+    resumedRef.current = true;
+    try {
+      const saved = sessionStorage.getItem("bb-logo-resume");
+      if (!saved) return;
+      const d = JSON.parse(saved) as { logoBase64?: string; mimeType?: string; brandName?: string; tagline?: string; industry?: string; tone?: string; targetAudience?: string; description?: string };
+      sessionStorage.removeItem("bb-logo-resume");
+      if (d.logoBase64) {
+        setLogoBase64(d.logoBase64);
+        // Reconstruct a preview data URL from base64
+        setLogoPreview(`data:${d.mimeType ?? "image/png"};base64,${d.logoBase64.slice(0, 100000)}`);
+      }
+      if (d.brandName) setBrandName(d.brandName);
+      if (d.tagline) setTagline(d.tagline);
+      if (d.industry) setIndustry(d.industry);
+      if (d.tone) setTones(d.tone.split(",").map((t: string) => t.trim()).filter(Boolean));
+      if (d.targetAudience) setAudiences(d.targetAudience.split(",").map((a: string) => a.trim()).filter(Boolean));
+      if (d.description) setDescription(d.description);
+      // Skip to describe step since logo is restored
+      setStep("describe");
+    } catch { /* ignore */ }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
