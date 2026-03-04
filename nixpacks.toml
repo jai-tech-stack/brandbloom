@@ -2,7 +2,7 @@
 nixPkgs = ["python311", "python311Packages.pip"]
 
 [phases.install]
-cmds = ["pip install fastapi uvicorn[standard] python-dotenv pydantic anthropic emergentintegrations"]
+cmds = ["pip install fastapi 'uvicorn[standard]' python-dotenv pydantic anthropic emergentintegrations --break-system-packages"]
 
 [start]
 cmd = "uvicorn backend.server:app --host 0.0.0.0 --port $PORT"

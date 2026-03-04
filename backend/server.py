@@ -39,9 +39,12 @@ def health_check():
 
 @app.post("/api/generate-image", response_model=GenerateResponse)
 async def generate_image(request: GenerateRequest):
-    """Generate an image using Gemini Nano Banana"""
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
-    
+    """Generate an image using Gemini Nano Banana (requires emergentintegrations)."""
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+    except ImportError:
+        return GenerateResponse(success=False, error="emergentintegrations not installed; install from your provider for image generation")
+
     api_key = os.getenv("EMERGENT_LLM_KEY")
     if not api_key:
         return GenerateResponse(success=False, error="EMERGENT_LLM_KEY not configured")
