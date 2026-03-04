@@ -1,17 +1,19 @@
 // src/app/api/stripe/checkout/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
 import { resolveAuthUser } from "@/lib/resolve-auth-user";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "", {
-  apiVersion: "2025-02-24.acacia",
-});
 
 export async function POST(request: NextRequest) {
   try {
     if (!process.env.STRIPE_SECRET_KEY) {
       return NextResponse.json({ error: "Stripe is not configured." }, { status: 500 });
     }
+
+    // Initialize Stripe lazily inside the handler — never at module load time
+    // This prevents build crashes when STRIPE_SECRET_KEY is not set during build
+    const Stripe = (await import("stripe")).default;
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: "2025-02-24.acacia",
+    });
 
     const authUser = await resolveAuthUser(request);
     if (!authUser) {
