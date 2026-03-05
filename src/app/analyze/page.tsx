@@ -662,21 +662,22 @@ function AnalyzeContent() {
   }, [promptParam]);
 
   useEffect(() => {
+    // Never redirect while session is still loading — causes the loop
+    if (status === "loading") return;
+
     if (status === "unauthenticated" && (url || brandIdParam)) {
-      // Decode url first to prevent double-encoding when user returns from login
-      const rawUrl = url ? (() => { try { return decodeURIComponent(url); } catch { return url; } })() : "";
-      const callback = rawUrl
-        ? `/analyze?url=${encodeURIComponent(rawUrl)}`
-        : brandIdParam
-        ? `/analyze?brandId=${encodeURIComponent(brandIdParam)}&stage=${encodeURIComponent(stage ?? "review")}`
-        : "/";
+      // url from searchParams is already decoded by Next.js — encode once cleanly
+      const callback = url
+        ? `/analyze?url=${encodeURIComponent(url)}`
+        : `/analyze?brandId=${encodeURIComponent(brandIdParam ?? "")}&stage=${encodeURIComponent(stage ?? "review")}`;
       router.replace(`/login?callbackUrl=${encodeURIComponent(callback)}`);
     }
-    // When user returns authenticated, allow extraction to run
+
+    // Reset extraction guard when user comes back authenticated
     if (status === "authenticated" && url) {
       extractionStartedRef.current = false;
     }
-  }, [status, url, brandIdParam, stage, router]);
+  }, [status]); // only re-run when auth status changes — not on every param change
 
   useEffect(() => {
     if (!brandIdParam || status !== "authenticated") return;
