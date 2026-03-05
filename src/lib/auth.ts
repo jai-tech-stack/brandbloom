@@ -4,6 +4,7 @@ import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db";
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET,
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -45,7 +46,6 @@ export const authOptions: NextAuthOptions = {
         (session.user as { id?: string }).id = token.id as string;
         session.user.email = (token.email as string) ?? session.user.email ?? undefined;
         session.user.name = (token.name as string) ?? session.user.name ?? undefined;
-        // Always reflect current balance from DB so credits stay correct after generation/purchase
         try {
           const dbUser = await prisma.user.findUnique({
             where: { id: token.id as string },
@@ -58,6 +58,18 @@ export const authOptions: NextAuthOptions = {
         }
       }
       return session;
+    },
+    async redirect({ url, baseUrl }) {
+      // Handle callbackUrl safely — prevent redirect to external URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      if (url.startsWith(baseUrl)) return url;
+      // Decode and re-check in case of double encoding
+      try {
+        const decoded = decodeURIComponent(url);
+        if (decoded.startsWith("/")) return `${baseUrl}${decoded}`;
+        if (decoded.startsWith(baseUrl)) return decoded;
+      } catch { /* ignore */ }
+      return baseUrl;
     },
   },
   pages: {
