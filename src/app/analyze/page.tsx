@@ -600,6 +600,7 @@ function AnalyzeContent() {
 
   const extractionStartedRef = useRef(false);
   const brandIdLoadedRef = useRef<string | null>(null);
+  const redirectedToLoginRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>(() => parsePhaseFromQuery(stage));
   const [stepIndex, setStepIndex] = useState(0);
@@ -639,14 +640,9 @@ function AnalyzeContent() {
   const domain = brand?.domain ?? (url ? (() => { try { return new URL(decodeURIComponent(url)).hostname.replace(/^www\./, ""); } catch { return ""; } })() : brandIdParam ? "—" : "");
 
   const goToPhase = useCallback((next: Phase) => {
+    // Only update state — don't change the URL which triggers re-renders and auth re-checks
     setPhase(next);
-    const params = new URLSearchParams();
-    if (url) params.set("url", decodeURIComponent(url));
-    params.set("stage", next);
-    if (brandIdParam) params.set("brandId", brandIdParam);
-    if (promptParam) params.set("prompt", promptParam);
-    router.replace(`/analyze?${params.toString()}`);
-  }, [url, router, brandIdParam, promptParam]);
+  }, []);
 
   const phaseInitialized = useRef(false);
   useEffect(() => {
@@ -662,22 +658,29 @@ function AnalyzeContent() {
   }, [promptParam]);
 
   useEffect(() => {
-    // Never redirect while session is still loading — causes the loop
+    // Wait for NextAuth to fully resolve — never act on loading state
     if (status === "loading") return;
 
-    if (status === "unauthenticated" && (url || brandIdParam)) {
-      // url from searchParams is already decoded by Next.js — encode once cleanly
-      const callback = url
-        ? `/analyze?url=${encodeURIComponent(url)}`
-        : `/analyze?brandId=${encodeURIComponent(brandIdParam ?? "")}&stage=${encodeURIComponent(stage ?? "review")}`;
-      router.replace(`/login?callbackUrl=${encodeURIComponent(callback)}`);
+    if (status === "authenticated") {
+      // User is logged in — allow extraction to run
+      redirectedToLoginRef.current = false;
+      extractionStartedRef.current = false;
+      return;
     }
 
-    // Reset extraction guard when user comes back authenticated
-    if (status === "authenticated" && url) {
-      extractionStartedRef.current = false;
-    }
-  }, [status]); // only re-run when auth status changes — not on every param change
+    // status === "unauthenticated"
+    if (redirectedToLoginRef.current) return; // already redirected, don't loop
+    if (!url && !brandIdParam) return; // nothing to protect
+
+    redirectedToLoginRef.current = true;
+
+    // Build callback — url from searchParams is already decoded by Next.js
+    const callback = url
+      ? `/analyze?url=${encodeURIComponent(url)}`
+      : `/analyze?brandId=${encodeURIComponent(brandIdParam ?? "")}&stage=${encodeURIComponent(stage ?? "review")}`;
+
+    router.replace(`/login?callbackUrl=${encodeURIComponent(callback)}`);
+  }, [status]); // ONLY depend on status — never re-fire on param changes
 
   useEffect(() => {
     if (!brandIdParam || status !== "authenticated") return;
@@ -707,8 +710,7 @@ function AnalyzeContent() {
       .catch(() => { /* silently ignore */ });
   }, [brandIdParam, status, stage]);
 
-  // URL-based extraction — runs when authenticated and url param is present
-  // extractionStartedRef is reset in the auth useEffect above when user returns from login
+  // URL-based extraction — only runs once per url+auth combo
   useEffect(() => {
     if (!url || status !== "authenticated" || !!brandIdParam) return;
 
@@ -759,7 +761,10 @@ function AnalyzeContent() {
         clearTimeout(timeoutId);
 
         if (res.status === 401) {
-          router.replace(`/login?callbackUrl=${encodeURIComponent(`/analyze?url=${encodeURIComponent(url)}`)}`);
+          // Session expired mid-extraction — redirect back with url preserved
+          const cb = `/analyze?url=${encodeURIComponent(url)}`;
+          redirectedToLoginRef.current = true;
+          router.replace(`/login?callbackUrl=${encodeURIComponent(cb)}`);
           return;
         }
 
