@@ -126,6 +126,78 @@ Build no longer installs `emergentintegrations`; the BLOOM+ API uses Anthropic o
 
 ---
 
+## Free servers for the BLOOM+ backend
+
+You can deploy the **BLOOM+ API** (Python/FastAPI in `backend/`) on these free tiers so the Next.js app can use `BACKEND_BLOOM_URL` for full brand extraction.
+
+| Provider   | Free tier notes |
+|-----------|------------------|
+| **Render** | 1 free Web Service; spins down after ~15 min idle (first request may be slow). |
+| **Fly.io** | Free allowance for small VMs; good for always-on APIs. |
+| **Railway** | Free trial / usage-based; check [railway.app](https://railway.app) for current plan. |
+
+### Deploy BLOOM+ on Render (free) — step by step
+
+1. **Open Render**  
+   Go to [render.com](https://render.com) and sign in (or sign up with GitHub).
+
+2. **Create a new Web Service**  
+   Click **New +** → **Web Service**.
+
+3. **Connect the repo**  
+   - If this is your first time: click **Connect account** under GitHub and authorize Render.  
+   - Under **Connect a repository**, find your **brandbloom** repo and click **Connect**.  
+   - Leave **Branch** as `main` (or use `release/live` if that’s your deploy branch).
+
+4. **Configure the service**  
+   - **Name:** e.g. `brandbloom-api` (this becomes `https://brandbloom-api.onrender.com`).  
+   - **Region:** pick one close to you.  
+   - **Root Directory:** leave blank (Dockerfile is in the repo root).  
+   - **Environment:** select **Docker**.  
+     - Render will detect the root **Dockerfile** and build the BLOOM+ API image.  
+   - **Instance Type:** leave as **Free** (or upgrade if you need more resources).
+
+5. **Environment variables**  
+   Click **Advanced** → **Add Environment Variable**, then add:
+
+   | Key | Value |
+   |-----|--------|
+   | `ANTHROPIC_API_KEY` | Your Anthropic API key (required for the backend) |
+   | `FRONTEND_URL` | (Optional) Your Next.js app URL, e.g. `https://your-app.vercel.app` |
+
+   Render injects `PORT` automatically; the Dockerfile already uses it.
+
+6. **Deploy**  
+   Click **Create Web Service**. Render will build the image (first time may take a few minutes) and start the service.
+
+7. **Get the URL**  
+   When the deploy finishes, the service URL is at the top (e.g. `https://brandbloom-api.onrender.com`). Copy it **without** a trailing slash.
+
+8. **Connect the Next.js app**  
+   - In **Vercel** (or wherever the Next.js app is hosted): Project → **Settings** → **Environment Variables**.  
+   - Add: **Name** `BACKEND_BLOOM_URL`, **Value** the URL you copied (e.g. `https://brandbloom-api.onrender.com`).  
+   - Redeploy the Next.js app so it picks up the new variable.
+
+9. **Verify**  
+   - Open `https://your-api.onrender.com/health` (or `/docs`) in a browser; you should see the API or Swagger UI.  
+   - In your app, run “Extract brand” with a URL; it should call the BLOOM+ backend when `BACKEND_BLOOM_URL` is set.
+
+**Note:** On the free tier, the service **spins down after ~15 minutes of no traffic**. The first request after that can take 30–60 seconds to respond (cold start).
+
+### Deploy BLOOM+ on Fly.io (free)
+
+1. Install [flyctl](https://fly.io/docs/hub/installing-flyctl/) and sign in: `fly auth login`.
+2. From the **project root** (where the Dockerfile is):  
+   `fly launch`  
+   Choose a name, region; when asked for a Dockerfile, use the root one. Don’t add a Postgres DB if you only need the backend.
+3. Set secrets:  
+   `fly secrets set ANTHROPIC_API_KEY=your_key`  
+   Optionally: `fly secrets set FRONTEND_URL=https://your-app.vercel.app`
+4. Deploy: `fly deploy`.
+5. Copy the app URL (e.g. `https://your-app.fly.dev`) and set it as `BACKEND_BLOOM_URL` on Vercel, then redeploy.
+
+---
+
 ## Option 2: Render (one free web service)
 
 **Free tier:** One Web Service + optional free Postgres (90 days, then paid).
