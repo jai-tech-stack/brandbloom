@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { scrapeBrandFromUrl } from "@/lib/brand-scraper";
 
-// Allow up to 60s on Vercel Pro; Hobby has 10s
 export const maxDuration = 60;
 
 import { analyzeBrandWithAI } from "@/lib/ai-brand-analysis";
@@ -38,9 +37,26 @@ export type BrandData = {
   twitterHandle?: string;
   industry?: string;
   contentPillars?: string[];
+  // Signals duplicate to caller
+  alreadyExists?: boolean;
 };
 
 const BACKEND_BLOOM_URL = process.env.BACKEND_BLOOM_URL || "";
+
+// ─── Domain normalization ─────────────────────────────────────────────────────
+// Used to detect duplicates across: http/https, www., trailing slashes, paths.
+// example.com === www.example.com === https://example.com/about
+
+export function normalizeDomain(raw: string): string {
+  try {
+    const withProto = raw.trim().startsWith("http") ? raw.trim() : `https://${raw.trim()}`;
+    const hostname = new URL(withProto).hostname.toLowerCase();
+    // Strip www. prefix
+    return hostname.startsWith("www.") ? hostname.slice(4) : hostname;
+  } catch {
+    return raw.trim().toLowerCase().replace(/^www\./, "").split("/")[0];
+  }
+}
 
 // ─── Color utilities ──────────────────────────────────────────────────────────
 
@@ -190,16 +206,14 @@ async function extractAdditionalSignals(href: string): Promise<{
   }
 }
 
-// ─── BLOOM+ profile mapper ─────────────────────────────────────────────────────
+// ─── BLOOM+ profile mapper ────────────────────────────────────────────────────
 
 function mapBloomProfileToBrandData(profile: Record<string, unknown>, url: string): BrandData {
   const primary = (profile.primary_colors as string[]) || [];
   const secondary = (profile.secondary_colors as string[]) || [];
   const rawColors = [...primary, ...secondary];
-  const domain = (() => {
-    try { return new URL(url).hostname; } catch { return url.replace(/^https?:\/\//, "").split("/")[0] || "website"; }
-  })();
-  const name = domain.replace(/^www\./, "").split(".")[0] || domain;
+  const domain = normalizeDomain(url);
+  const name = domain.split(".")[0] || domain;
   const style = (profile.style as string) || "";
   const mood = Array.isArray(profile.mood) ? (profile.mood as string[]).join(", ") : "";
   return {
@@ -283,12 +297,61 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ─── DUPLICATE CHECK — before ANY scraping or AI calls ───────────────────
+    // Normalize domain so www.example.com === example.com === https://example.com/page
+    const normalizedDomain = normalizeDomain(href);
+
+    const existingBrand = await prisma.brand.findFirst({
+      where: {
+        userId: authUser.id,
+        domain: normalizedDomain,
+        // Also catch exact siteUrl matches as a secondary check
+      },
+      select: {
+        id: true,
+        name: true,
+        domain: true,
+        siteUrl: true,
+        colors: true,
+        image: true,
+        description: true,
+        tagline: true,
+        fonts: true,
+        logos: true,
+        socialAccounts: true,
+        personality: true,
+        tone: true,
+      },
+    }).catch(() => null);
+
+    if (existingBrand) {
+      // Return immediately — no scraping, no AI, no credits wasted.
+      // The agentic system already has this brand's full profile.
+      console.info(`[extract-brand] Duplicate blocked for user=${authUser.id} domain=${normalizedDomain} → brandId=${existingBrand.id}`);
+      return NextResponse.json(
+        {
+          alreadyExists: true,
+          brandId: existingBrand.id,
+          brand: {
+            id: existingBrand.id,
+            name: existingBrand.name,
+            domain: existingBrand.domain,
+            siteUrl: existingBrand.siteUrl,
+          },
+          error: `You already have "${existingBrand.name}" in your workspace. Each brand can only be added once.`,
+        },
+        { status: 409 }
+      );
+    }
+
+    // ─── Not a duplicate — proceed with full extraction ───────────────────────
+
     let brand!: BrandData;
     let pageTextExcerpt: string | undefined;
     let strategyProfileJson: string | null = null;
     let usedBloomBackend = false;
 
-    // ─── BLOOM+ backend path (optional, falls through on failure) ─────────────
+    // BLOOM+ backend path (optional, falls through on failure)
     if (BACKEND_BLOOM_URL) {
       try {
         const res = await fetch(
@@ -297,7 +360,7 @@ export async function POST(request: NextRequest) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url: href }),
-            signal: AbortSignal.timeout(20000), // don't hang forever
+            signal: AbortSignal.timeout(20000),
           }
         );
         if (res.ok) {
@@ -312,7 +375,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ─── Node scraper path (primary, or fallback if BLOOM+ failed) ───────────
+    // Node scraper path (primary, or fallback if BLOOM+ failed)
     if (!usedBloomBackend) {
       let scraped: Awaited<ReturnType<typeof scrapeBrandFromUrl>>;
       try {
@@ -324,10 +387,7 @@ export async function POST(request: NextRequest) {
 
         if (!scraped) {
           return NextResponse.json(
-            {
-              error:
-                "Could not fetch this URL within 25 seconds. The site may be blocking server requests (Cloudflare, login wall, etc.). Try your homepage URL or a simpler URL.",
-            },
+            { error: "Could not fetch this URL within 25 seconds. The site may be blocking server requests (Cloudflare, login wall, etc.). Try your homepage URL." },
             { status: 422 }
           );
         }
@@ -374,6 +434,7 @@ export async function POST(request: NextRequest) {
         description: bestDescription || scraped.description,
         colors: mergedColors.length ? mergedColors : filterBrandColors(normalizeAndDedupeColors(scraped.colors ?? [])),
         image: bestLogo,
+        domain: normalizedDomain, // use normalized domain consistently
         fonts: scraped.fonts ?? [],
         logos: scraped.logos ?? (bestLogo ? [bestLogo] : []),
         socialAccounts: [
@@ -486,42 +547,25 @@ export async function POST(request: NextRequest) {
     const canonical = brandIntelligenceToPrismaData(bi);
     const deepAnalysisJson = JSON.stringify(unified);
 
-    // ─── Save to DB ────────────────────────────────────────────────────────────
-    const existingBrand = await prisma.brand.findFirst({
-      where: { userId: authUser.id, siteUrl: href },
-      select: { id: true },
-    }).catch(() => null);
-
-    const saved = existingBrand
-      ? await prisma.brand.update({
-          where: { id: existingBrand.id },
-          data: {
-            ...canonical,
-            domain: brand.domain,
-            image: brand.image,
-            logos: JSON.stringify(brand.logos),
-            socialAccounts: brand.socialAccounts?.length ? JSON.stringify(brand.socialAccounts) : null,
-            deepAnalysis: deepAnalysisJson,
-            strategyProfile: strategyProfileJson,
-          },
-        })
-      : await prisma.brand.create({
-          data: {
-            userId: authUser.id,
-            ...canonical,
-            siteUrl: href,
-            domain: brand.domain,
-            image: brand.image,
-            logos: JSON.stringify(brand.logos),
-            socialAccounts: brand.socialAccounts?.length ? JSON.stringify(brand.socialAccounts) : null,
-            deepAnalysis: deepAnalysisJson,
-            strategyProfile: strategyProfileJson,
-            source: "url",
-            sourceType: "url",
-          },
-        });
+    // ─── Save to DB — always CREATE (duplicate already blocked above) ─────────
+    const saved = await prisma.brand.create({
+      data: {
+        userId: authUser.id,
+        ...canonical,
+        siteUrl: href,
+        domain: normalizedDomain,
+        image: brand.image,
+        logos: JSON.stringify(brand.logos),
+        socialAccounts: brand.socialAccounts?.length ? JSON.stringify(brand.socialAccounts) : null,
+        deepAnalysis: deepAnalysisJson,
+        strategyProfile: strategyProfileJson,
+        source: "url",
+        sourceType: "url",
+      },
+    });
 
     brand.brandId = saved.id;
+    brand.domain = normalizedDomain;
 
     return NextResponse.json(brand);
   } catch (e) {

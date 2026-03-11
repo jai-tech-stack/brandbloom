@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -397,9 +397,22 @@ function CreateBar({ brands, initialBrandId, onAssetCreated }: {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Skeleton for prerender / Suspense fallback ───────────────────────────────
 
-export default function DashboardPage() {
+function DashboardSkeleton() {
+  return (
+    <main className="min-h-screen">
+      <Header />
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+      </div>
+    </main>
+  );
+}
+
+// ─── Page (wrapped in Suspense so useSearchParams does not break prerender) ─────
+
+function DashboardContent() {
   const { data: session, status } = useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -610,5 +623,13 @@ export default function DashboardPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <DashboardContent />
+    </Suspense>
   );
 }
