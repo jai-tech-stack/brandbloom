@@ -33,7 +33,6 @@ export type BrandData = {
   toneKeywords?: string[];
   aestheticNarrative?: string;
   strategyProfile?: Record<string, unknown>;
-  // Enhanced extraction fields
   metaDescription?: string;
   ogImage?: string;
   twitterHandle?: string;
@@ -98,37 +97,24 @@ function saturation(hex: string): number {
   return (max - min) / max;
 }
 
-/**
- * Filter out pure white/black/near-grey colors. Keep brand-representative colors.
- * Also preserves near-white/near-black if they're clearly intentional brand colors.
- */
 function filterBrandColors(hexColors: string[]): string[] {
   const out: string[] = [];
   for (const hex of hexColors) {
     if (hex.length !== 7) continue;
     const L = luminance(hex);
     const S = saturation(hex);
-    // Skip pure/near-pure white
     if (L >= 0.97) continue;
-    // Skip pure/near-pure black (but allow very dark brand colors with some saturation)
     if (L <= 0.02 && S < 0.1) continue;
-    // Skip mid-grey (no saturation)
     if (L > 0.08 && L < 0.95 && S <= 0.04) continue;
     out.push(hex);
   }
   const filtered = out.slice(0, 6);
-  // Fallback: if we filtered everything, just return top 6 raw
   if (filtered.length === 0 && hexColors.length > 0) return hexColors.slice(0, 6);
   return filtered;
 }
 
-// ─── Enhanced scraping — supplement scrapeBrandFromUrl with additional signals ─
+// ─── Enhanced scraping ────────────────────────────────────────────────────────
 
-/**
- * Try to fetch the page and extract additional brand signals beyond what
- * scrapeBrandFromUrl gets — specifically: OG image, meta description,
- * Twitter handle, CSS variable colors, brand name from JSON-LD schema.
- */
 async function extractAdditionalSignals(href: string): Promise<{
   ogImage: string | null;
   twitterHandle: string | null;
@@ -151,22 +137,18 @@ async function extractAdditionalSignals(href: string): Promise<{
 
     const html = await res.text();
 
-    // OG image
     const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
       ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
     const ogImage = ogImageMatch?.[1] ?? null;
 
-    // Twitter handle
     const twitterMatch = html.match(/<meta[^>]+name=["']twitter:site["'][^>]+content=["'](@[^"']+)["']/i)
       ?? html.match(/<meta[^>]+content=["'](@[^"']+)["'][^>]+name=["']twitter:site["']/i);
     const twitterHandle = twitterMatch?.[1] ?? null;
 
-    // Meta description
     const descMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{10,400})["']/i)
       ?? html.match(/<meta[^>]+content=["']([^"']{10,400})["'][^>]+name=["']description["']/i);
     const metaDescription = descMatch?.[1]?.trim() ?? null;
 
-    // JSON-LD schema name + description
     let schemaName: string | null = null;
     let schemaDescription: string | null = null;
     const jsonLdMatches = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) ?? [];
@@ -180,7 +162,6 @@ async function extractAdditionalSignals(href: string): Promise<{
       } catch { /* ignore */ }
     }
 
-    // CSS custom properties (--color-*, --primary, etc.)
     const cssVarColorMatches = html.match(/--[a-z-]*(color|primary|secondary|brand|accent|bg|background|text)[^:]*:\s*(#[0-9a-fA-F]{3,6}|rgba?\([^)]+\))/gi) ?? [];
     const cssVarColors: string[] = [];
     for (const match of cssVarColorMatches) {
@@ -188,7 +169,6 @@ async function extractAdditionalSignals(href: string): Promise<{
       if (colorMatch) cssVarColors.push(colorMatch[1]);
     }
 
-    // Inline style colors from prominent elements
     const inlineColors: string[] = [];
     const inlineMatches = html.match(/style=["'][^"']*(?:color|background)[^"']*["']/gi) ?? [];
     for (const match of inlineMatches.slice(0, 50)) {
@@ -303,11 +283,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let brand: BrandData;
+    let brand!: BrandData;
     let pageTextExcerpt: string | undefined;
     let strategyProfileJson: string | null = null;
+    let usedBloomBackend = false;
 
-    // ─── BLOOM+ backend path ───────────────────────────────────────────────────
+    // ─── BLOOM+ backend path (optional, falls through on failure) ─────────────
     if (BACKEND_BLOOM_URL) {
       try {
         const res = await fetch(
@@ -316,23 +297,23 @@ export async function POST(request: NextRequest) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url: href }),
+            signal: AbortSignal.timeout(20000), // don't hang forever
           }
         );
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error((err as { detail?: string }).detail || res.statusText || "Backend error");
+        if (res.ok) {
+          const profile = (await res.json()) as Record<string, unknown>;
+          brand = mapBloomProfileToBrandData(profile, href);
+          usedBloomBackend = true;
+        } else {
+          console.warn(`[extract-brand] BLOOM backend returned ${res.status} — falling through to Node scraper`);
         }
-        const profile = (await res.json()) as Record<string, unknown>;
-        brand = mapBloomProfileToBrandData(profile, href);
       } catch (fetchErr) {
-        console.error("extract-brand (BLOOM backend) error:", fetchErr);
-        return NextResponse.json(
-          { error: fetchErr instanceof Error ? fetchErr.message : "Brand BLOOM+ backend failed." },
-          { status: 502 }
-        );
+        console.warn("[extract-brand] BLOOM backend unreachable — falling through to Node scraper:", (fetchErr as Error).message);
       }
-    } else {
-      // ─── Node scraper path ────────────────────────────────────────────────────
+    }
+
+    // ─── Node scraper path (primary, or fallback if BLOOM+ failed) ───────────
+    if (!usedBloomBackend) {
       let scraped: Awaited<ReturnType<typeof scrapeBrandFromUrl>>;
       try {
         scraped = await withTimeout(
@@ -360,14 +341,12 @@ export async function POST(request: NextRequest) {
 
       pageTextExcerpt = scraped.pageTextExcerpt;
 
-      // ─── Enhanced signal extraction (parallel with scrape result) ──────────
       const additionalSignals = await withTimeout(
         () => extractAdditionalSignals(href),
         12000,
         "extractAdditionalSignals"
       );
 
-      // Merge colors: scraper colors + CSS var colors + inline style colors
       const allRawColors = [
         ...(scraped.colors ?? []),
         ...(additionalSignals?.cssVarColors ?? []),
@@ -375,18 +354,15 @@ export async function POST(request: NextRequest) {
       ];
       const mergedColors = filterBrandColors(normalizeAndDedupeColors(allRawColors));
 
-      // Better logo: prefer OG image if no logo found
       const bestLogo = scraped.image
         ?? scraped.logos?.[0]
         ?? additionalSignals?.ogImage
         ?? null;
 
-      // Better name: prefer JSON-LD schema name over domain extraction
       const bestName = additionalSignals?.schemaName?.trim()
         ?? scraped.name?.trim()
         ?? "";
 
-      // Better description: prefer JSON-LD schema, then meta description, then scraped
       const bestDescription = additionalSignals?.schemaDescription?.trim()
         ?? (additionalSignals?.metaDescription && additionalSignals.metaDescription.length > 30 ? additionalSignals.metaDescription.trim() : null)
         ?? scraped.description?.trim()
@@ -403,13 +379,12 @@ export async function POST(request: NextRequest) {
         socialAccounts: [
           ...(scraped.socialAccounts ?? []),
           ...(additionalSignals?.twitterHandle ? [additionalSignals.twitterHandle] : []),
-        ].filter((v, i, a) => a.indexOf(v) === i), // dedupe
+        ].filter((v, i, a) => a.indexOf(v) === i),
         metaDescription: additionalSignals?.metaDescription ?? undefined,
         ogImage: additionalSignals?.ogImage ?? undefined,
         twitterHandle: additionalSignals?.twitterHandle ?? undefined,
       };
 
-      // ─── AI enrichment (only if keys are configured) ──────────────────────
       if (hasAIKeys()) {
         const deepInput = {
           name: brand.name,
@@ -435,7 +410,6 @@ export async function POST(request: NextRequest) {
           visualCues: brand.colors?.length ? `Colors: ${brand.colors.slice(0, 6).join(", ")}` : "",
         };
 
-        // Run deep analysis + strategy in parallel with independent timeouts
         const [dna, strategyProfileResult] = await Promise.all([
           withTimeout(() => deepBrandAnalysis(deepInput), 20000, "deepBrandAnalysis"),
           withTimeout(() => analyzeDeepStrategy(strategyInput), 20000, "analyzeDeepStrategy"),
@@ -451,7 +425,6 @@ export async function POST(request: NextRequest) {
           if (dna.toneKeywords?.length) brand.toneKeywords = dna.toneKeywords;
           if (dna.aestheticNarrative) brand.aestheticNarrative = dna.aestheticNarrative;
         } else {
-          // Fallback: simpler AI analysis
           const analysis = await withTimeout(
             () => analyzeBrandWithAI({
               name: scraped.name,
@@ -471,12 +444,9 @@ export async function POST(request: NextRequest) {
           brand.strategyProfile = strategyProfileResult as unknown as Record<string, unknown>;
         }
       } else {
-        // No AI keys: do lightweight heuristic tone/aesthetic inference from scraped text
         if (pageTextExcerpt) {
           const text = pageTextExcerpt.toLowerCase();
           const toneKeywords: string[] = [];
-
-          // Heuristic tone detection from content
           if (/innovat|cutting.edge|advanced|next.gen/i.test(text)) toneKeywords.push("innovative");
           if (/trust|reliable|proven|since \d{4}/i.test(text)) toneKeywords.push("trustworthy");
           if (/simple|easy|effortless|intuitive/i.test(text)) toneKeywords.push("simple");
@@ -487,14 +457,12 @@ export async function POST(request: NextRequest) {
           if (/creative|design|art|vision/i.test(text)) toneKeywords.push("creative");
           if (/sustainable|eco|green|ethical/i.test(text)) toneKeywords.push("sustainable");
           if (/fast|quick|instant|speed/i.test(text)) toneKeywords.push("fast-paced");
-
           if (toneKeywords.length > 0) {
             brand.toneKeywords = toneKeywords.slice(0, 6);
             brand.tone = toneKeywords.slice(0, 3).join(", ");
           }
         }
-
-        console.info("[extract-brand] No AI keys configured — using heuristic tone analysis. Add OPENAI_API_KEY or ANTHROPIC_API_KEY for richer brand intelligence.");
+        console.info("[extract-brand] No AI keys configured — using heuristic tone analysis.");
       }
     }
 
@@ -519,8 +487,6 @@ export async function POST(request: NextRequest) {
     const deepAnalysisJson = JSON.stringify(unified);
 
     // ─── Save to DB ────────────────────────────────────────────────────────────
-    // Try to find an existing brand for this user+URL and update it (prevents duplicates).
-    // If not found, create a new one. This works without any schema migration.
     const existingBrand = await prisma.brand.findFirst({
       where: { userId: authUser.id, siteUrl: href },
       select: { id: true },
