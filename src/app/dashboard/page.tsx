@@ -333,6 +333,16 @@ export default function DashboardPage() {
                         >
                           ×
                         </button>
+                        {asset.brand && (
+                          <a
+                            href={`/api/brand-kit-pdf?brandId=${asset.brand.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 rounded-lg border border-surface-600 px-3 py-2 text-xs text-stone-400 transition hover:border-surface-500 hover:text-white"
+                          >
+                            ⬇ Brand Kit PDF
+                          </a>
+                        )}
                       </div>
                     </div>
                   </div>
