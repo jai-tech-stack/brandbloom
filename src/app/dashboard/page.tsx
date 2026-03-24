@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Header } from "@/components/Header";
+import { BrandKitDownload } from "@/components/BrandKitDownload";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,10 +138,11 @@ function AssetCard({ asset, onDownload, onDelete }: {
           ) : <div className="h-7 w-7 shrink-0" />}
 
           {asset.brand ? (
-            <a href={`/api/brand-kit-pdf?brandId=${asset.brand.id}`} target="_blank" rel="noopener noreferrer" title="PDF"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-surface-600 text-stone-500 hover:border-surface-500 hover:text-white transition">
-              <IconPDF />
-            </a>
+            <BrandKitDownload
+              brandId={asset.brand.id}
+              label="PDF"
+              className="flex h-7 items-center justify-center rounded-lg border border-surface-600 px-2 text-[10px] text-stone-500 hover:border-surface-500 hover:text-white transition"
+            />
           ) : <div className="h-7 w-7 shrink-0" />}
 
           <div className="flex-1" />
@@ -216,10 +218,7 @@ function BrandCard({ brand, onDelete, onSelect }: {
       <div className="mt-auto pt-4">
         <p className="mb-2.5 text-[11px] text-stone-600">{brand._count?.assets ?? 0} asset{brand._count?.assets !== 1 ? "s" : ""}</p>
         <div className="flex items-center gap-2">
-          <a href={`/api/brand-kit-pdf?brandId=${brand.id}`} target="_blank" rel="noopener noreferrer"
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-surface-600 px-2.5 text-[11px] text-stone-500 hover:border-surface-500 hover:text-white transition">
-            <IconPDF /> PDF
-          </a>
+          <BrandKitDownload brandId={brand.id} label="PDF" />
           <button type="button" onClick={() => onSelect(brand.id)}
             className="flex h-8 flex-1 items-center justify-center rounded-lg bg-brand-500/20 text-[11px] font-semibold text-brand-300 hover:bg-brand-500/30 transition">
             Create →

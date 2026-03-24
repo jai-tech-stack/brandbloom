@@ -57,15 +57,27 @@ export function Hero() {
     }
     setLogoLoading(true);
     try {
-      const formData = new FormData();
-      formData.set("logo", logoFile);
-      if (logoBrandName.trim()) formData.set("brandName", logoBrandName.trim());
-      const res = await fetch("/api/extract-brand-from-logo", {
+      const bytes = new Uint8Array(await logoFile.arrayBuffer());
+      let binary = "";
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      const base64 = btoa(binary);
+
+      const res = await fetch("/api/brands/create", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          method: "logo",
+          logoBase64: base64,
+          logoMimeType: logoFile.type || "image/png",
+          brandName: logoBrandName.trim() || "Logo Brand",
+        }),
         credentials: "include",
       });
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(() => ({})) as {
+        success?: boolean;
+        data?: { brandId?: string };
+        error?: string;
+      };
       if (!res.ok) {
         const message = res.status === 503
           ? (data.error || "Logo analysis requires OpenAI. Add OPENAI_API_KEY to your server environment.")
@@ -74,7 +86,7 @@ export function Hero() {
         setLogoLoading(false);
         return;
       }
-      const brandId = data.brandId;
+      const brandId = data.data?.brandId;
       if (brandId) {
         router.push(`/analyze?brandId=${encodeURIComponent(brandId)}&stage=review`);
       } else {

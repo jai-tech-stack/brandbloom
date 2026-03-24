@@ -108,13 +108,15 @@ export default function CreateBrandPage() {
     setError(null);
     const tick = setInterval(() => setProcStep((p) => Math.min(p + 1, PROC_STEPS.length - 1)), 1400);
     try {
-      const res = await fetch("/api/create-logo-brand", {
+      const res = await fetch("/api/brands/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          logoBase64, mimeType: logoFile?.type ?? "image/png",
-          brandName: brandName.trim(), tagline: tagline.trim() || undefined,
+          method: "logo",
+          logoBase64, logoMimeType: logoFile?.type ?? "image/png",
+          brandName: brandName.trim(),
+          tagline: tagline.trim() || undefined,
           industry: industry || undefined, tone: tones.join(", ") || undefined,
           targetAudience: audiences.join(", ") || undefined, description: description.trim() || undefined,
         }),
@@ -125,12 +127,12 @@ export default function CreateBrandPage() {
         router.push(`/login?callbackUrl=${encodeURIComponent("/create-brand?resume=1")}`);
         return;
       }
-      const data = await res.json().catch(() => ({})) as { brandId?: string; error?: string };
-      if (!res.ok || data.error) { setError(data.error ?? "Brand creation failed. Please try again."); setStep("describe"); return; }
-      if (data.brandId) {
+      const data = await res.json().catch(() => ({})) as { success?: boolean; data?: { brandId?: string }; error?: string };
+      if (!res.ok || !data.success) { setError(data.error ?? "Brand creation failed. Please try again."); setStep("describe"); return; }
+      if (data.data?.brandId) {
         setProcStep(PROC_STEPS.length - 1);
         setStep("done");
-        setTimeout(() => router.push(`/analyze?brandId=${data.brandId}&stage=review`), 1000);
+        setTimeout(() => router.push(`/analyze?brandId=${data.data?.brandId}&stage=review`), 1000);
       }
     } catch (e) {
       clearInterval(tick);

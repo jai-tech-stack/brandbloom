@@ -156,28 +156,44 @@ export default function CampaignPage() {
     setIsPlanning(true);
     setError(null);
     try {
-      const res = await fetch("/api/campaign/plan", {
+      const res = await fetch("/api/campaigns/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          ...body,
+          mode: "quick-plan",
+        }),
       });
-      const data = await res.json().catch(() => ({})) as { error?: string; campaignId?: string; campaignName?: string; objective?: string; strategySummary?: string; duration?: string; assetPlan?: AssetPlanItem[] };
+      const data = await res.json().catch(() => ({})) as {
+        success?: boolean;
+        data?: {
+          campaignId?: string;
+          plan?: {
+            campaignName?: string;
+            objective?: string;
+            strategySummary?: string;
+            duration?: string;
+            assetPlan?: AssetPlanItem[];
+          };
+        };
+        error?: string;
+      };
       if (res.status === 401) {
         window.location.href = "/login?callbackUrl=" + encodeURIComponent("/campaign");
         return;
       }
-      if (!res.ok) {
+      if (!res.ok || !data.success || !data.data?.plan) {
         setError(data.error ?? "We couldn't complete this step. Please try again.");
         return;
       }
       setPlanPreview({
-        campaignId: data.campaignId!,
-        campaignName: data.campaignName!,
-        objective: data.objective!,
-        strategySummary: data.strategySummary!,
-        duration: data.duration!,
-        assetPlan: data.assetPlan ?? [],
+        campaignId: data.data.campaignId!,
+        campaignName: data.data.plan.campaignName!,
+        objective: data.data.plan.objective!,
+        strategySummary: data.data.plan.strategySummary!,
+        duration: data.data.plan.duration!,
+        assetPlan: data.data.plan.assetPlan ?? [],
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "We hit an issue. Please try again.");
@@ -230,38 +246,44 @@ export default function CampaignPage() {
     generatingProgressIntervalRef.current = progressInterval;
 
     try {
-      const res = await fetch("/api/campaign/generate-assets", {
+      const res = await fetch("/api/campaigns/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ campaignId: planPreview.campaignId }),
+        body: JSON.stringify({
+          mode: "full-generate",
+          brandId,
+          campaignId: planPreview.campaignId,
+        }),
       });
-      const data = await res.json().catch(() => ({})) as { error?: string; credits?: number; campaign?: { id: string; title: string; goal: string; strategySummary: string; assetPlanSnapshot: string | null; assets: CampaignAsset[]; brand: { id: string; name: string; domain: string } } };
+      const data = await res.json().catch(() => ({})) as {
+        success?: boolean;
+        data?: {
+          campaign?: { id: string; title: string; goal: string; strategySummary: string; assetPlanSnapshot: string | null; assets: CampaignAsset[]; brand: { id: string; name: string; domain: string } };
+        };
+        error?: string;
+      };
 
       if (res.status === 401) {
         window.location.href = "/login?callbackUrl=" + encodeURIComponent("/campaign");
         return;
       }
 
-      if (!res.ok) {
+      if (!res.ok || !data.success || !data.data?.campaign) {
         // FIX: Reset ref so user can retry
         generateSubmittedRef.current = false;
         setError(data.error ?? "Generation failed. Please try again.");
         return;
       }
 
-      if (data.credits != null) {
-        window.dispatchEvent(new CustomEvent("credits-updated", { detail: data.credits }));
-      }
-
       setCompletedCampaign({
-        id: data.campaign!.id,
-        title: data.campaign!.title,
-        goal: data.campaign!.goal,
-        strategySummary: data.campaign!.strategySummary ?? "",
-        assetPlanSnapshot: data.campaign!.assetPlanSnapshot ?? null,
-        assets: data.campaign!.assets ?? [],
-        brand: data.campaign!.brand,
+        id: data.data.campaign.id,
+        title: data.data.campaign.title,
+        goal: data.data.campaign.goal,
+        strategySummary: data.data.campaign.strategySummary ?? "",
+        assetPlanSnapshot: data.data.campaign.assetPlanSnapshot ?? null,
+        assets: data.data.campaign.assets ?? [],
+        brand: data.data.campaign.brand,
       });
       setPlanPreview(null);
       setGeneratingProgress(null);

@@ -93,26 +93,28 @@ export default function AnalyzePage() {
       const withProto = trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
       setTimeout(() => { if (urlStep !== "done") setUrlStep("analyzing"); }, 4000);
 
-      const res = await fetch("/api/extract-brand", {
+      const res = await fetch("/api/brands/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: withProto }),
+        body: JSON.stringify({ method: "url", url: withProto }),
         credentials: "include",
       });
 
       const data = await res.json().catch(() => ({})) as {
-        brandId?: string;
-        brand?: { id: string; name: string; domain: string };
-        alreadyExists?: boolean;
+        success?: boolean;
+        data?: {
+          brandId?: string;
+          brand?: { id?: string; name?: string; domain?: string };
+        };
         error?: string;
       };
 
-      // Handle 409 — brand already exists (caught at backend)
-      if (res.status === 409 || data.alreadyExists) {
+      // Handle 409 — brand already exists
+      if (res.status === 409) {
         const existing: ExistingBrand = {
-          id: data.brand?.id ?? data.brandId ?? "",
-          name: data.brand?.name ?? "this brand",
-          domain: data.brand?.domain ?? normalizeDomain(trimmed),
+          id: data.data?.brand?.id ?? data.data?.brandId ?? "",
+          name: data.data?.brand?.name ?? "this brand",
+          domain: data.data?.brand?.domain ?? normalizeDomain(trimmed),
         };
         setDuplicateBrand(existing);
         setUrlLoading(false);
@@ -120,11 +122,11 @@ export default function AnalyzePage() {
         return;
       }
 
-      if (!res.ok || data.error) {
+      if (!res.ok || !data.success) {
         throw new Error(data.error ?? "Failed to extract brand. Check the URL and try again.");
       }
 
-      const brandId = data.brand?.id ?? data.brandId;
+      const brandId = data.data?.brand?.id ?? data.data?.brandId;
       setUrlStep("done");
       setTimeout(() => router.push(brandId ? `/dashboard?brandId=${brandId}&new=1` : "/dashboard"), 600);
     } catch (err) {
@@ -151,34 +153,42 @@ export default function AnalyzePage() {
     setLogoLoading(true);
 
     try {
-      const formData = new FormData();
-      formData.append("logo", logoFile);
-      if (brandName.trim()) formData.append("brandName", brandName.trim());
-
-      const res = await fetch("/api/extract-brand-from-logo", {
+      const bytes = new Uint8Array(await logoFile.arrayBuffer());
+      let binary = "";
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      const base64 = btoa(binary);
+      const res = await fetch("/api/brands/create", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          method: "logo",
+          logoBase64: base64,
+          logoMimeType: logoFile.type || "image/png",
+          brandName: brandName.trim() || "Logo Brand",
+        }),
         credentials: "include",
       });
 
       const data = await res.json().catch(() => ({})) as {
-        brand?: { id: string };
-        brandId?: string;
-        alreadyExists?: boolean;
+        success?: boolean;
+        data?: {
+          brandId?: string;
+          brand?: { id?: string };
+        };
         error?: string;
       };
 
-      if (res.status === 409 || data.alreadyExists) {
+      if (res.status === 409) {
         setLogoError("A brand with this name already exists in your workspace.");
         setLogoLoading(false);
         return;
       }
 
-      if (!res.ok || data.error) {
+      if (!res.ok || !data.success) {
         throw new Error(data.error ?? "Failed to analyze logo. Try again.");
       }
 
-      const brandId = data.brand?.id ?? data.brandId;
+      const brandId = data.data?.brand?.id ?? data.data?.brandId;
       router.push(brandId ? `/dashboard?brandId=${brandId}&new=1` : "/dashboard");
     } catch (err) {
       setLogoError(err instanceof Error ? err.message : "Something went wrong.");
