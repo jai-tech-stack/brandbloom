@@ -154,7 +154,7 @@ const FEATURES = [
   { icon: "🖼️", title: "Logo-Only Mode", body: "No website? Upload your logo PNG, JPG, or SVG. Claude Vision analyzes it and builds your full Brand DNA." },
   { icon: "✏️", title: "Editable Brand DNA", body: "Colors, tone, audience, values, messaging — all editable before generation. Inspired by Pomelli, built for creators." },
   { icon: "📐", title: "8-Platform Resize", body: "One generation, 8 sizes: Instagram (1:1, 9:16), Facebook, LinkedIn, Twitter/X, Pinterest, YouTube, Square Ad." },
-  { icon: "🔲", title: "4K Output", body: "Toggle 4K for ultra-sharp visuals at up to 2048px — ready for print, web, and pitch decks." },
+  { icon: "🔲", title: "Premium 4K Output", body: "Every generation runs in premium mode (4K + premium aesthetics + premium ideas) for ultra-sharp visuals at up to 2048px." },
   { icon: "📸", title: "Photo → Branded", body: "Upload a product photo. Flux img2img transforms it with your brand's colors, style, and aesthetic." },
 ];
 
@@ -163,7 +163,7 @@ const FAQS = [
   { q: "How does URL extraction work?", a: "We fetch your website, parse CSS for color variables and font-family declarations, read JSON-LD schema for brand name and description, check Open Graph metadata for logos, then run Claude AI to infer tone, personality, target audience, and strategy. Most brands get accurate colors and fonts on the first pass." },
   { q: "What if I only have a logo?", a: "That's what Logo Mode is for. Upload your logo, tell us your brand name and a bit about your business — we use Claude Vision to analyze dominant colors, shape language, and visual personality, then build your full Brand DNA from that." },
   { q: "How does logo generation work?", a: "Our agent pipeline runs: strategy analysis → 5 concept prompts → Flux image generation → AI critique and ranking. You get 5 logo concepts scored against your brand strategy, with usage guidelines for each." },
-  { q: "How do credits work?", a: "You get 10 free credits on signup. Standard generation = 1 credit, 4K = 2 credits. Credits never expire. Buy more anytime." },
+  { q: "How do credits work?", a: "You get 10 free credits on signup. Premium generation (4K + aesthetics + ideas) = 2 credits. Credits never expire. Buy more anytime." },
   { q: "Can I edit the brand kit after extraction?", a: "Yes. The Brand DNA Editor lets you change every field — primary and secondary colors (with hex pickers), heading and body fonts, tone, personality, target audience, values, key messages, and aesthetic narrative. Changes apply to all future generations immediately." },
   { q: "What platforms are supported for resize?", a: "Instagram Post (1080×1080), Instagram Story (1080×1920), Facebook Post (1200×630), LinkedIn Post (1200×628), Twitter/X (1600×900), Pinterest Pin (1000×1500), YouTube Thumbnail (1280×720), Square Ad (1200×1200)." },
 ];

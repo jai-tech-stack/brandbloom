@@ -24,11 +24,11 @@ Aligned with how tools like Bloom typically work: **LLM for understanding**, **d
 
 | Provider | Model | Env variable | Notes |
 |----------|--------|----------------|-------|
-| **Replicate** | **FLUX Schnell** (Black Forest Labs) | `REPLICATE_API_TOKEN` | GPU-backed; same family as Stable Diffusion / Flux. |
+| **Replicate** | **FLUX 1.1 Pro** (Black Forest Labs) | `REPLICATE_API_TOKEN` | GPU-backed premium generation model. |
 
 - **Code:** `src/lib/ai-generator.ts` — `generateImageWithReplicate()`.
 - **Infra:** Replicate runs the model on their infrastructure (NVIDIA GPUs). No self-hosted GPU required.
-- **Cost:** ~\$0.003 per image (FLUX Schnell).
+- **Cost:** Model pricing varies; FLUX 1.1 Pro is premium tier (check current Replicate pricing).
 
 Without `REPLICATE_API_TOKEN`, the app runs in **demo mode** (placeholder images).
 

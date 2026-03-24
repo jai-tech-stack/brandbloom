@@ -34,7 +34,7 @@ Replicate charges per run (pay-as-you-go). You must add a payment method before 
 3. Click **Add payment method** and add a **card** (credit/debit).
 4. Optionally add **prepaid credits** if you prefer not to attach a card (see Replicate’s current options on the billing page).
 
-**Approximate cost:** FLUX Schnell is about **$0.003–0.005 per image**. A few dollars of credit can generate hundreds of images.
+**Approximate cost:** FLUX 1.1 Pro is higher-cost than Schnell; check current [Replicate pricing](https://replicate.com/pricing) for exact per-image rates.
 
 ---
 

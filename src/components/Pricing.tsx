@@ -7,7 +7,7 @@ const plans = [
     name: "Starter",
     price: "Free",
     description: "Try BrandBloom with limited generations.",
-    features: [`${DEFAULT_CREDITS} free credits`, "Basic brand extraction", "Standard formats"],
+    features: [`${DEFAULT_CREDITS} free credits`, "Basic brand extraction", "Premium generation (4K + aesthetics + ideas)"],
     cta: "Get started",
     highlighted: false,
   },

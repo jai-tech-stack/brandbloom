@@ -21,6 +21,16 @@ type BrandInput = {
   values?: string[];
 };
 
+function parseJsonArray(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 // ─── 1. Ask Python AssetCreatorAgent to build the prompt ─────────────────────
 // This is the key upgrade — instead of weak string concat, we send the full
 // brand profile to the Python agent which uses Claude to write a rich,
@@ -197,43 +207,32 @@ function aspectRatioToSize4K(ratio: string): { width: number; height: number } {
   };
 }
 
-// Dimensions string for agent e.g. "1024x1024"
-function dimensionsString(ratio: string, quality: string): string {
-  const size = quality === "4k" ? aspectRatioToSize4K(ratio) : aspectRatioToSize(ratio);
+// Dimensions string for agent e.g. "2048x2048" (premium-only 4K)
+function dimensionsString(ratio: string): string {
+  const size = aspectRatioToSize4K(ratio);
   return `${size.width}x${size.height}`;
 }
 
 async function generateWithReplicate(
   prompt: string,
-  aspectRatio: string,
-  quality: "standard" | "quality" | "4k" = "standard"
+  aspectRatio: string
 ): Promise<{ url: string; width: number; height: number } | null> {
   const token = process.env.REPLICATE_API_TOKEN;
   if (!token) return null;
 
-  const is4k = quality === "4k";
-  const isQuality = quality === "quality" || quality === "4k";
-  const model = isQuality
-    ? "black-forest-labs/flux-1.1-pro"
-    : "black-forest-labs/flux-schnell";
-  const size = is4k ? aspectRatioToSize4K(aspectRatio) : aspectRatioToSize(aspectRatio);
+  const model = "black-forest-labs/flux-1.1-pro";
+  const size = aspectRatioToSize4K(aspectRatio);
 
   const input: Record<string, unknown> = {
     prompt,
     width: size.width,
     height: size.height,
-    output_quality: is4k ? 100 : 80,
+    output_quality: 100,
     output_format: "webp",
     disable_safety_checker: false,
+    prompt_upsampling: true,
+    safety_tolerance: 2,
   };
-
-  if (isQuality) {
-    input.prompt_upsampling = true;
-    input.safety_tolerance = 2;
-  } else {
-    input.num_inference_steps = 4;
-    input.go_fast = true;
-  }
 
   try {
     const createRes = await fetch(
@@ -340,7 +339,7 @@ export async function POST(request: NextRequest) {
       ideaType?: string;
       aspectRatio?: string;
       limit?: number;
-      quality?: "standard" | "quality" | "4k";
+      premiumIdeas?: boolean;
     };
 
     const {
@@ -350,28 +349,79 @@ export async function POST(request: NextRequest) {
       ideaType,
       aspectRatio = "1:1",
       limit = 1,
-      quality = "standard",
+      premiumIdeas: _premiumIdeas = false,
     } = body;
 
+    const resolvedPremiumIdeas = true;
+
     const resolvedAspect = aspectRatio === "__auto__" ? "1:1" : aspectRatio;
-    const dims = dimensionsString(resolvedAspect, quality);
-    const size = (quality === "4k" ? aspectRatioToSize4K : aspectRatioToSize)(resolvedAspect);
+    const dims = dimensionsString(resolvedAspect);
+    const size = aspectRatioToSize4K(resolvedAspect);
+
+    // If caller only sends brandId, hydrate brand context from DB so generation stays on-brand.
+    let resolvedBrand: BrandInput | undefined = brand;
+    if (!resolvedBrand && brandId) {
+      const dbBrand = await prisma.brand.findFirst({
+        where: { id: brandId, userId: authUser.id },
+        select: {
+          name: true,
+          description: true,
+          tagline: true,
+          personality: true,
+          tone: true,
+          visualStyle: true,
+          targetAudience: true,
+          primaryColor: true,
+          secondaryColors: true,
+          headingFont: true,
+          bodyFont: true,
+          logos: true,
+          image: true,
+        },
+      });
+      if (dbBrand) {
+        const colors = [dbBrand.primaryColor, ...parseJsonArray(dbBrand.secondaryColors)].filter(
+          (v): v is string => typeof v === "string" && v.trim().length > 0
+        );
+        const fonts = [dbBrand.headingFont, dbBrand.bodyFont].filter(
+          (v): v is string => typeof v === "string" && v.trim().length > 0
+        );
+        const logos = [...parseJsonArray(dbBrand.logos), dbBrand.image].filter(
+          (v): v is string => typeof v === "string" && v.trim().length > 0
+        );
+        resolvedBrand = {
+          name: dbBrand.name,
+          description: dbBrand.description ?? undefined,
+          tagline: dbBrand.tagline ?? undefined,
+          personality: dbBrand.personality ?? undefined,
+          tone: dbBrand.tone ?? undefined,
+          visualStyleSummary: dbBrand.visualStyle ?? undefined,
+          targetAudience: dbBrand.targetAudience ?? undefined,
+          colors,
+          fonts,
+          logos,
+        };
+      }
+    }
 
     // ── Build prompt: try Python agent first, fall back to local ──────────────
     let prompt: string | null = null;
 
-    if (brand) {
+    if (resolvedBrand) {
       // Try the AssetCreatorAgent (Claude-powered, brand-aware)
-      prompt = await buildPromptViaAgent(brand, ideaType ?? "social", dims, promptOverride);
+      prompt = await buildPromptViaAgent(resolvedBrand, ideaType ?? "social", dims, promptOverride);
       if (prompt) {
-        console.info("[generate-assets] Using agent-built prompt for", brand.name);
+        console.info("[generate-assets] Using agent-built prompt for", resolvedBrand.name);
       }
     }
 
     // Fallback: local rich prompt builder
     if (!prompt) {
-      prompt = buildFallbackPrompt(brand, promptOverride, ideaType, dims);
+      prompt = buildFallbackPrompt(resolvedBrand, promptOverride, ideaType, dims);
       console.info("[generate-assets] Using fallback prompt");
+    }
+    if (resolvedPremiumIdeas) {
+      prompt = `${prompt}. Concept emphasis: premium creative direction, bold original visual concept, campaign-grade composition, scroll-stopping idea.`;
     }
 
     const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
@@ -379,8 +429,6 @@ export async function POST(request: NextRequest) {
     const results = [];
     let replicateAttempted = false;
     let demo = false;
-    const replicateQuality: "standard" | "quality" | "4k" = quality === "4k" ? "4k" : quality;
-
     for (let i = 0; i < Math.min(limit, 4); i++) {
       let imageUrl: string | null = null;
       let imgWidth = size.width;
@@ -389,7 +437,7 @@ export async function POST(request: NextRequest) {
       // Try Replicate first (higher quality Flux model)
       if (hasReplicate) {
         replicateAttempted = true;
-        const result = await generateWithReplicate(prompt, resolvedAspect, replicateQuality);
+        const result = await generateWithReplicate(prompt, resolvedAspect);
         if (result) {
           imageUrl = result.url;
           imgWidth = result.width;
@@ -416,7 +464,7 @@ export async function POST(request: NextRequest) {
         demo = true;
         results.push({
           id: `demo-${Date.now()}-${i}`,
-          url: getDemoImage(size.width, size.height, `${brand?.name ?? "brand"}-${i}`),
+          url: getDemoImage(size.width, size.height, `${resolvedBrand?.name ?? "brand"}-${i}`),
           label: promptOverride?.slice(0, 50) ?? ideaType ?? "Brand asset (placeholder)",
           type: ideaType ?? "general",
           width: size.width,
@@ -428,7 +476,7 @@ export async function POST(request: NextRequest) {
 
     // Deduct credits
     let remainingCredits: number | undefined;
-    const creditCost = quality === "4k" ? 2 : 1;
+    const creditCost = 2;
     if (!demo) {
       try {
         const updated = await prisma.user.update({

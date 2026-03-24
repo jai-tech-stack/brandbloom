@@ -9,7 +9,7 @@
 - Next.js 14, TypeScript, Tailwind
 - Landing page, /analyze multi-phase flow, creation dashboard
 - Brand extraction: meta, colors, (optional) logos/fonts and AI personality
-- Image generation: Replicate FLUX Schnell (or demo placeholders)
+- Image generation: Replicate FLUX 1.1 Pro (or demo placeholders)
 - Aspect ratio, idea cards, curated aesthetics
 
 ---

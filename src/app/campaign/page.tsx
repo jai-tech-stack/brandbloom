@@ -334,7 +334,7 @@ export default function CampaignPage() {
         <div className="mx-auto max-w-lg px-4 pt-32 pb-24 text-center">
           <h1 className="mb-4 text-2xl font-bold text-white">Sign in to create campaigns</h1>
           <p className="mb-8 text-stone-400">Plan and generate full marketing campaigns from your brand.</p>
-          <Link href="/login" className="inline-block rounded-xl bg-brand-500 px-6 py-3 font-medium text-white hover:bg-brand-400">Sign in</Link>
+          <Link href="/login" className="inline-block rounded-xl bg-brand-500 px-6 py-3 font-medium text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99]">Sign in</Link>
         </div>
       </main>
     );
@@ -345,11 +345,23 @@ export default function CampaignPage() {
       <Header />
       <div className="mx-auto max-w-4xl px-4 pt-24 pb-24">
         <div className="mb-8">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-brand-500/35 bg-brand-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />
+            Premium Campaign Studio
+          </div>
           <h1 className="text-3xl font-bold text-white">Campaign</h1>
           <p className="mt-1 text-stone-400">Create a strategic campaign plan, then generate assets.</p>
-          <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-surface-600 bg-surface-800/50 px-3 py-1.5 text-xs text-stone-400">
-            <span aria-hidden>◇</span> Strategy powered by AI Brand Consultant
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-2 rounded-lg border border-surface-600 bg-surface-800/50 px-3 py-1.5 text-xs text-stone-400">
+              <span aria-hidden>◇</span> Strategy powered by AI Brand Consultant
+            </div>
+            <div className="inline-flex items-center rounded-lg border border-brand-500/40 bg-brand-500/10 px-3 py-1.5 text-xs font-semibold text-brand-300">
+              Premium mode: 4K + aesthetics + ideas
+            </div>
           </div>
+          <p className="mt-3 text-xs text-stone-500">
+            Every generated asset uses premium mode: 4K output, premium aesthetics, and premium ideas.
+          </p>
         </div>
 
         {/* Step indicator */}
@@ -362,7 +374,7 @@ export default function CampaignPage() {
         )}
 
         {/* Brand selector */}
-        <div className="mb-6 rounded-xl border border-surface-600 bg-surface-800/50 p-6">
+        <div className="mb-6 rounded-xl border border-surface-600 bg-gradient-to-b from-surface-800/70 to-surface-800/50 p-6 ring-1 ring-white/5">
           <label className="mb-2 block text-sm font-medium text-stone-300">Select brand</label>
           <p className="mb-3 text-xs text-stone-500">Which brand is this campaign for?</p>
           <select
@@ -385,7 +397,7 @@ export default function CampaignPage() {
 
         {/* URL brand: direct goal selection */}
         {brandId && !planPreview && !completedCampaign && skipBriefStep && (
-          <form onSubmit={handleGenerateCampaign} className="mb-8 rounded-xl border border-surface-600 bg-surface-800/50 p-6">
+          <form onSubmit={handleGenerateCampaign} className="mb-8 rounded-xl border border-surface-600 bg-gradient-to-b from-surface-800/70 to-surface-800/50 p-6 ring-1 ring-white/5">
             <label className="mb-2 block text-sm font-medium text-stone-300">Campaign goal</label>
             <p className="mb-3 text-xs text-stone-500">What outcome do you want from this campaign?</p>
             <select
@@ -406,7 +418,7 @@ export default function CampaignPage() {
               disabled={isPlanning}
             />
             {error && <div className="mb-4 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
-            <button type="submit" disabled={isPlanning || !brandId} className="w-full rounded-xl bg-brand-500 py-3 font-semibold text-white hover:bg-brand-400 disabled:opacity-50">
+            <button type="submit" disabled={isPlanning || !brandId} className="w-full rounded-xl bg-brand-500 py-3 font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99] disabled:opacity-50">
               {isPlanning ? (
                 <span className="flex items-center justify-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />Analyzing brand positioning…</span>
               ) : "Generate campaign plan"}
@@ -416,7 +428,7 @@ export default function CampaignPage() {
 
         {/* Logo brand: brief mode selection */}
         {brandId && !planPreview && !completedCampaign && requireBrief && briefMode === null && (
-          <div className="mb-8 rounded-xl border border-surface-600 bg-surface-800/50 p-6">
+          <div className="mb-8 rounded-xl border border-surface-600 bg-gradient-to-b from-surface-800/70 to-surface-800/50 p-6 ring-1 ring-white/5">
             <p className="mb-4 text-stone-300">Since this brand was created from a logo (no website), we need a brief to plan the campaign.</p>
             <h2 className="mb-2 text-sm font-semibold text-white">How do you want to brief us?</h2>
             <div className="flex flex-wrap gap-4">
@@ -434,7 +446,7 @@ export default function CampaignPage() {
 
         {/* Logo brand brief form */}
         {brandId && !planPreview && !completedCampaign && requireBrief && briefMode !== null && (
-          <form onSubmit={handleGenerateCampaign} className="mb-8 rounded-xl border border-surface-600 bg-surface-800/50 p-6">
+          <form onSubmit={handleGenerateCampaign} className="mb-8 rounded-xl border border-surface-600 bg-gradient-to-b from-surface-800/70 to-surface-800/50 p-6 ring-1 ring-white/5">
             {briefMode === "quick" && (
               <>
                 <label className="mb-2 block text-sm font-medium text-stone-300">What do you want to achieve?</label>
@@ -481,8 +493,8 @@ export default function CampaignPage() {
             </div>
             {error && <div className="mt-4 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
             <div className="mt-6 flex gap-4">
-              <button type="button" onClick={() => { setBriefMode(null); setError(null); }} className="rounded-lg border border-surface-500 px-4 py-2 text-sm font-medium text-stone-300 hover:bg-surface-700" disabled={isPlanning}>Back</button>
-              <button type="submit" disabled={isPlanning || !canSubmitLogoBrief} className="rounded-xl bg-brand-500 px-6 py-2 font-semibold text-white hover:bg-brand-400 disabled:opacity-50">
+              <button type="button" onClick={() => { setBriefMode(null); setError(null); }} className="rounded-lg border border-surface-500 px-4 py-2 text-sm font-medium text-stone-300 transition hover:bg-surface-700 active:scale-[0.99]" disabled={isPlanning}>Back</button>
+              <button type="submit" disabled={isPlanning || !canSubmitLogoBrief} className="rounded-xl bg-brand-500 px-6 py-2 font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99] disabled:opacity-50">
                 {isPlanning ? (
                   <span className="flex items-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />Planning…</span>
                 ) : "Generate campaign plan"}
@@ -493,7 +505,7 @@ export default function CampaignPage() {
 
         {/* Plan preview */}
         {planPreview && (
-          <div className="mb-8 rounded-xl border border-surface-600 bg-surface-800/50 p-6">
+          <div className="mb-8 rounded-xl border border-surface-600 bg-gradient-to-b from-surface-800/70 to-surface-800/50 p-6 ring-1 ring-white/5">
             <div className="mb-4 inline-flex items-center gap-2 rounded-lg border border-surface-600 bg-surface-800/80 px-3 py-1.5 text-xs text-stone-400">
               <span aria-hidden>◇</span> Strategy powered by AI Brand Consultant
             </div>
@@ -508,7 +520,7 @@ export default function CampaignPage() {
             <h3 className="mt-6 text-base font-semibold text-white">Planned assets ({planPreview.assetPlan.slice(0, 6).length})</h3>
             <ul className="mt-4 space-y-3">
               {planPreview.assetPlan.slice(0, 6).map((item, i) => (
-                <li key={i} className="rounded-lg border border-surface-600 bg-surface-800/50 p-4">
+                <li key={i} className="rounded-lg border border-surface-600 bg-surface-800/70 p-4 ring-1 ring-white/5">
                   <p className="font-medium text-white">{item.assetType.replace(/_/g, " ")} · {item.platform}</p>
                   <p className="mt-1 text-xs font-medium uppercase tracking-wide text-stone-500">Purpose</p>
                   <p className="mt-0.5 text-sm text-stone-300">{item.purpose}</p>
@@ -521,13 +533,13 @@ export default function CampaignPage() {
                 type="button"
                 onClick={handleGenerateAllAssets}
                 disabled={isGenerating}
-                className="flex-1 rounded-xl bg-brand-500 py-3 font-semibold text-white hover:bg-brand-400 disabled:opacity-50"
+                className="flex-1 rounded-xl bg-brand-500 py-3 font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99] disabled:opacity-50"
               >
                 {isGenerating ? (
                   <span className="flex items-center justify-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />Generating…</span>
                 ) : "Approve & generate assets"}
               </button>
-              <button type="button" onClick={() => { setPlanPreview(null); setError(null); }} disabled={isGenerating} className="rounded-xl border border-surface-500 px-4 py-3 text-sm font-medium text-stone-300 hover:bg-surface-700 disabled:opacity-50">
+              <button type="button" onClick={() => { setPlanPreview(null); setError(null); }} disabled={isGenerating} className="rounded-xl border border-surface-500 px-4 py-3 text-sm font-medium text-stone-300 transition hover:bg-surface-700 active:scale-[0.99] disabled:opacity-50">
                 Start over
               </button>
             </div>
@@ -536,7 +548,7 @@ export default function CampaignPage() {
 
         {/* Generating progress */}
         {isGenerating && (
-          <div className="mb-8 rounded-xl border border-surface-600 bg-surface-800/30 p-6">
+          <div className="mb-8 rounded-xl border border-surface-600 bg-gradient-to-b from-surface-800/50 to-surface-800/30 p-6 ring-1 ring-white/5">
             <p className="font-medium text-stone-300">
               {generatingProgress ? `Designing campaign visuals… (${generatingProgress.current + 1} of ${generatingProgress.total})` : "Designing campaign visuals…"}
             </p>
@@ -549,7 +561,7 @@ export default function CampaignPage() {
 
         {/* Completed campaign */}
         {completedCampaign && (
-          <div className="rounded-xl border border-surface-600 bg-surface-800/50 p-6">
+          <div className="rounded-xl border border-surface-600 bg-gradient-to-b from-surface-800/70 to-surface-800/50 p-6 ring-1 ring-white/5">
             <h2 className="text-xl font-bold text-white">Campaign complete ✓</h2>
             <p className="mt-2 text-stone-300">{completedCampaign.title}</p>
             {completedCampaign.strategySummary && <p className="mt-4 text-stone-400">{completedCampaign.strategySummary}</p>}
@@ -575,7 +587,7 @@ export default function CampaignPage() {
               <h3 className="mb-4 text-sm font-semibold text-white">Assets</h3>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {completedCampaign.assets.map((asset) => (
-                  <div key={asset.id} className="overflow-hidden rounded-lg border border-surface-600 bg-surface-800/50">
+                  <div key={asset.id} className="overflow-hidden rounded-lg border border-surface-600 bg-surface-800/70 ring-1 ring-white/5">
                     <div className="relative aspect-square w-full bg-surface-700">
                       {asset.url ? (
                         <Image src={asset.url} alt={asset.label} fill unoptimized className="object-cover" />
@@ -596,8 +608,8 @@ export default function CampaignPage() {
             </div>
 
             <div className="mt-8 flex gap-4">
-              <Link href="/dashboard" className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-400">View in Dashboard</Link>
-              <button type="button" onClick={resetAll} className="rounded-lg border border-surface-500 px-4 py-2 text-sm font-medium text-stone-300 hover:bg-surface-700">Create another campaign</button>
+              <Link href="/dashboard" className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99]">View in Dashboard</Link>
+              <button type="button" onClick={resetAll} className="rounded-lg border border-surface-500 px-4 py-2 text-sm font-medium text-stone-300 transition hover:bg-surface-700 active:scale-[0.99]">Create another campaign</button>
             </div>
           </div>
         )}

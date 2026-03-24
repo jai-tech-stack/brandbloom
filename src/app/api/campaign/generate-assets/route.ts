@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
       const result = await runGenerationPipeline({
         brand: orchestratorBrand,
         ideaType: asset.ideaType ?? "linkedin_post",
-        userPrompt: userPrompt.slice(0, 500),
+        userPrompt: `${userPrompt.slice(0, 500)}. Premium ideas mode: bold original concept, campaign-grade composition, premium aesthetics, ultra-detailed 4K-ready finish.`,
         brandLock: false,
         logoImageUrl: logoUrl,
         sessionId: `${sessionPrefix}-${i}`,

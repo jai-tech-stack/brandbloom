@@ -35,10 +35,10 @@ export function CreditBadge() {
 
 // ─── 2. Inline warning banner (shown above generate buttons when low) ─────────
 interface CreditWarningProps {
-  cost?: number;  // credits this action will cost (default 1)
+  cost?: number;  // credits this action will cost (default 2 for premium generation)
 }
 
-export function CreditWarning({ cost = 1 }: CreditWarningProps) {
+export function CreditWarning({ cost = 2 }: CreditWarningProps) {
   const { credits } = useCredits();
 
   if (credits === null) return null;
@@ -77,13 +77,13 @@ export function CreditWarning({ cost = 1 }: CreditWarningProps) {
   );
 }
 
-// ─── 3. Cost indicator (shows "1 credit" next to generate buttons) ────────────
+// ─── 3. Cost indicator (shows generation credit cost) ─────────────────────────
 interface CreditCostProps {
   cost?: number;
   label?: string;
 }
 
-export function CreditCost({ cost = 1, label }: CreditCostProps) {
+export function CreditCost({ cost = 2, label }: CreditCostProps) {
   const { credits } = useCredits();
   const canAfford = credits === null || credits >= cost;
 
@@ -183,7 +183,7 @@ export function OutOfCreditsModal({ open, onClose, action }: OutOfCreditsModalPr
 // ─── 5. useGenerateWithCredits — wraps any generate call with credit checks ────
 // Usage: const { generate, outOfCredits, setOutOfCredits } = useGenerateWithCredits()
 // Then: await generate(() => fetch('/api/generate-assets', ...), cost)
-export function useGenerateGuard(cost = 1) {
+export function useGenerateGuard(cost = 2) {
   const { credits, refresh } = useCredits();
   const [showModal, setShowModal] = useState(false);
 

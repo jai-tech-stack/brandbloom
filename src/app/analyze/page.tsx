@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 
-type Tab = "url" | "logo";
+type Tab = "url" | "instagram" | "logo";
 
 type ExistingBrand = {
   id: string;
@@ -39,6 +39,7 @@ export default function AnalyzePage() {
   const [urlError, setUrlError] = useState("");
   const [urlStep, setUrlStep] = useState<"idle" | "scraping" | "analyzing" | "done">("idle");
   const [duplicateBrand, setDuplicateBrand] = useState<ExistingBrand | null>(null);
+  const [instagramInput, setInstagramInput] = useState("");
 
   // Logo flow
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -136,6 +137,76 @@ export default function AnalyzePage() {
     }
   }
 
+  // ── Instagram submit ───────────────────────────────────────────────────────
+  async function handleInstagramSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = instagramInput.trim();
+    if (!trimmed) return;
+
+    setUrlError("");
+    setUrlLoading(true);
+    setUrlStep("scraping");
+    setDuplicateBrand(null);
+
+    try {
+      const handle = trimmed
+        .replace(/^https?:\/\/(www\.)?instagram\.com\//i, "")
+        .replace(/^@/, "")
+        .replace(/\/.*$/, "")
+        .trim();
+
+      if (!handle) {
+        throw new Error("Please enter a valid Instagram handle or profile URL.");
+      }
+
+      setTimeout(() => { setUrlStep("analyzing"); }, 1200);
+
+      const res = await fetch("/api/brands/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          method: "instagram",
+          instagramHandle: handle,
+          instagramUrl: `https://www.instagram.com/${handle}/`,
+        }),
+        credentials: "include",
+      });
+
+      const data = await res.json().catch(() => ({})) as {
+        success?: boolean;
+        data?: {
+          brandId?: string;
+          brand?: { id?: string; name?: string; domain?: string };
+        };
+        error?: string;
+      };
+
+      if (res.status === 409) {
+        const existing: ExistingBrand = {
+          id: data.data?.brand?.id ?? data.data?.brandId ?? "",
+          name: data.data?.brand?.name ?? handle,
+          domain: data.data?.brand?.domain ?? `instagram:${handle}`,
+        };
+        setDuplicateBrand(existing);
+        setUrlLoading(false);
+        setUrlStep("idle");
+        return;
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error ?? "Failed to analyze Instagram profile.");
+      }
+
+      const brandId = data.data?.brand?.id ?? data.data?.brandId;
+      setUrlStep("done");
+      setTimeout(() => router.push(brandId ? `/dashboard?brandId=${brandId}&new=1` : "/dashboard"), 600);
+    } catch (err) {
+      setUrlError(err instanceof Error ? err.message : "Something went wrong.");
+      setUrlStep("idle");
+      setUrlLoading(false);
+    }
+  }
+
   // ── Logo submit ───────────────────────────────────────────────────────────
 
   const handleFile = useCallback((file: File) => {
@@ -215,18 +286,25 @@ export default function AnalyzePage() {
 
         {/* Heading */}
         <div className="mb-10 text-center">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand-500/35 bg-brand-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />
+            Premium Brand Setup
+          </div>
           <h1 className="text-4xl font-bold tracking-tight text-white">Add your brand</h1>
           <p className="mt-3 text-stone-400">
             BrandBloom learns your brand once. After that, just describe what you need.
           </p>
+          <p className="mt-2 text-xs text-stone-500">
+            Generation runs in premium mode: 4K + premium aesthetics + premium ideas.
+          </p>
         </div>
 
         {/* Card */}
-        <div className="w-full rounded-3xl border border-surface-700 bg-surface-900 p-8 shadow-2xl shadow-black/60">
+        <div className="w-full rounded-3xl border border-surface-700 bg-gradient-to-b from-surface-900 to-surface-900/90 p-8 shadow-2xl shadow-black/60 ring-1 ring-white/5">
 
           {/* Tabs */}
           <div className="mb-7 flex rounded-xl border border-surface-700 bg-surface-800 p-1">
-            {(["url", "logo"] as Tab[]).map((t) => (
+            {(["url", "instagram", "logo"] as Tab[]).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -235,10 +313,17 @@ export default function AnalyzePage() {
                   tab === t ? "bg-brand-500 text-white shadow" : "text-stone-500 hover:text-stone-300"
                 }`}
               >
-                {t === "url" ? "🌐 Website URL" : "🖼 Upload Logo"}
+                {t === "url" ? "🌐 Website URL" : t === "instagram" ? "📸 Instagram" : "🖼 Upload Logo"}
               </button>
             ))}
           </div>
+          <p className="mb-5 rounded-lg border border-surface-700 bg-surface-800/70 px-3 py-2 text-xs text-stone-400">
+            {tab === "url"
+              ? "Best for full extraction of logos, colors, fonts, and brand voice from your site."
+              : tab === "instagram"
+              ? "Use your Instagram profile when your website is not ready yet."
+              : "Upload your logo to bootstrap a brand kit instantly."}
+          </p>
 
           {/* ── URL tab ── */}
           {tab === "url" && (
@@ -304,11 +389,83 @@ export default function AnalyzePage() {
               <button
                 type="submit"
                 disabled={urlLoading || !url.trim() || !!duplicateBrand}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white transition hover:bg-brand-400 disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99] disabled:opacity-50"
               >
                 {urlLoading ? (
                   <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> Analyzing…</>
                 ) : "Analyze Brand →"}
+              </button>
+            </form>
+          )}
+
+          {/* ── Instagram tab ── */}
+          {tab === "instagram" && (
+            <form onSubmit={handleInstagramSubmit} className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-stone-400">
+                  Instagram handle or profile URL
+                </label>
+                <p className="mb-2 text-xs text-stone-500">
+                  Examples: <span className="text-stone-400">@brandname</span> or
+                  <span className="text-stone-400"> instagram.com/brandname</span>
+                </p>
+                <div className={`flex overflow-hidden rounded-xl border bg-surface-800 transition focus-within:border-brand-500 ${
+                  duplicateBrand ? "border-amber-500/60" : "border-surface-600"
+                }`}>
+                  <span className="flex items-center pl-3.5 text-stone-600 text-sm select-none">@</span>
+                  <input
+                    type="text"
+                    value={instagramInput}
+                    onChange={(e) => { setInstagramInput(e.target.value); setUrlError(""); setDuplicateBrand(null); }}
+                    placeholder="brandhandle or instagram.com/brandhandle"
+                    disabled={urlLoading}
+                    autoFocus
+                    className="flex-1 bg-transparent px-2 py-3 text-sm text-white placeholder:text-stone-600 focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              {duplicateBrand && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                  <p className="text-sm font-medium text-amber-300">
+                    "{duplicateBrand.name}" is already in your workspace
+                  </p>
+                  <Link
+                    href={`/dashboard?brandId=${duplicateBrand.id}`}
+                    className="mt-3 inline-block rounded-lg bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition"
+                  >
+                    Open in Dashboard →
+                  </Link>
+                </div>
+              )}
+
+              {urlLoading && (
+                <div className="space-y-2">
+                  <div className="h-1 w-full overflow-hidden rounded-full bg-surface-700">
+                    <div className={`h-full rounded-full bg-brand-500 transition-all duration-1000 ${
+                      urlStep === "scraping" ? "w-1/3" :
+                      urlStep === "analyzing" ? "w-2/3" :
+                      urlStep === "done" ? "w-full" : "w-0"
+                    }`} />
+                  </div>
+                  <p className="text-center text-xs text-stone-500">{stepLabel[urlStep]}</p>
+                </div>
+              )}
+
+              {urlError && (
+                <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+                  {urlError}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={urlLoading || !instagramInput.trim() || !!duplicateBrand}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99] disabled:opacity-50"
+              >
+                {urlLoading ? (
+                  <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> Analyzing…</>
+                ) : "Analyze Instagram Brand →"}
               </button>
             </form>
           )}
@@ -375,7 +532,7 @@ export default function AnalyzePage() {
               <button
                 type="submit"
                 disabled={logoLoading || !logoFile}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white transition hover:bg-brand-400 disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99] disabled:opacity-50"
               >
                 {logoLoading ? (
                   <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> Analyzing…</>
@@ -383,6 +540,12 @@ export default function AnalyzePage() {
               </button>
             </form>
           )}
+
+          <div className="mt-6 grid grid-cols-3 gap-2 rounded-xl border border-surface-700 bg-surface-800/50 p-2 text-center text-[11px] text-stone-400">
+            <span className="rounded-lg bg-surface-800 px-2 py-1">Fast extraction</span>
+            <span className="rounded-lg bg-surface-800 px-2 py-1">Editable brand DNA</span>
+            <span className="rounded-lg bg-surface-800 px-2 py-1">Premium-ready assets</span>
+          </div>
         </div>
 
         {/* Footer link */}

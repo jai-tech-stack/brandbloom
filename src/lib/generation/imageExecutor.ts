@@ -31,7 +31,7 @@ export type ExecuteOptions = {
 
 /**
  * Execute image generation. Uses blueprint aspect ratio and dimensions.
- * Logo reference: Replicate FLUX Schnell may not support image input; we still pass prompt that describes logo placement.
+ * Logo reference: Replicate FLUX may not support image input in this path; we still pass prompt that describes logo placement.
  */
 export async function executeImageGeneration(
   finalPrompt: string,

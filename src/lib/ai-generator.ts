@@ -1,5 +1,5 @@
 /**
- * AI image generator — Replicate FLUX Schnell.
+ * AI image generator — Replicate FLUX 1.1 Pro.
  * Uses Replicate SDK when available; falls back to HTTP API.
  */
 
@@ -62,7 +62,7 @@ export function buildBackgroundPrompt(
   return parts.join(" ");
 }
 
-const FLUX_MODEL = "black-forest-labs/flux-schnell";
+const FLUX_MODEL = "black-forest-labs/flux-1.1-pro";
 
 /** Extract image URL from Replicate SDK output (FileOutput or URL string). */
 function urlFromOutput(output: unknown): string | null {
@@ -81,7 +81,7 @@ function urlFromOutput(output: unknown): string | null {
 }
 
 /**
- * Generate a single image via Replicate FLUX Schnell.
+ * Generate a single image via Replicate FLUX 1.1 Pro.
  * Prefers the official Replicate SDK; falls back to HTTP API.
  */
 export async function generateImageWithReplicate(

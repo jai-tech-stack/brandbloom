@@ -14,7 +14,7 @@ const PLANS = [
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STARTER ?? "",
     perCredit: "$0.18",
     highlight: false,
-    features: ["50 credits", "Standard quality generation", "All asset types", "PNG/JPG/WebP export"],
+    features: ["50 credits", "Premium generation (4K + aesthetics + ideas)", "All asset types", "PNG/JPG/WebP export"],
   },
   {
     id: "popular",
@@ -24,7 +24,7 @@ const PLANS = [
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_POPULAR ?? "",
     perCredit: "$0.14",
     highlight: true,
-    features: ["200 credits", "Standard + 4K quality", "All asset types", "Platform resize", "Photo → branded"],
+    features: ["200 credits", "Premium generation (4K + aesthetics + ideas)", "All asset types", "Platform resize", "Photo → branded"],
   },
   {
     id: "pro",
@@ -46,7 +46,7 @@ const SUBSCRIPTION_PLANS = [
     price: 19,
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_SUB_PRO ?? "",
     highlight: true,
-    features: ["200 credits/month", "4K output", "Photo → branded", "8-platform resize", "Priority generation", "Credits reset monthly"],
+    features: ["200 credits/month", "Premium generation (4K + aesthetics + ideas)", "Photo → branded", "8-platform resize", "Priority generation", "Credits reset monthly"],
   },
   {
     id: "sub_agency",
@@ -263,9 +263,8 @@ export default function PricingPage() {
           <h3 className="mb-4 text-sm font-bold text-white">How credits work</h3>
           <div className="space-y-2.5">
             {[
-              { action: "Standard image generation", cost: "1 credit" },
-              { action: "4K image generation", cost: "2 credits" },
-              { action: "Photo → Branded transform", cost: "1 credit" },
+              { action: "Premium image generation (4K + aesthetics + ideas)", cost: "2 credits" },
+              { action: "Photo → Branded transform (premium)", cost: "2 credits" },
               { action: "Platform resize", cost: "1 credit per size" },
               { action: "URL brand extraction", cost: "Free" },
               { action: "Logo brand creation", cost: "Free" },

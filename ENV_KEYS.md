@@ -3,7 +3,7 @@
 ## Image generation and “Demo mode”
 
 **Primary: REPLICATE_API_TOKEN (Flux)**  
-The `/api/generate-assets` route uses **Replicate** (FLUX Schnell) when `REPLICATE_API_TOKEN` (or `REPLICATE_API_KEY`) is set. That gives you **real AI-generated images** without running any Python image server.
+The `/api/generate-assets` route uses **Replicate** (FLUX 1.1 Pro) when `REPLICATE_API_TOKEN` (or `REPLICATE_API_KEY`) is set. That gives you **real premium AI-generated images** without running any Python image server.
 
 **Where it’s used:**
 - When you click to **generate assets** on the analyze page, the Next.js route calls `generateImageWithReplicate()` from `@/lib/ai-generator`.

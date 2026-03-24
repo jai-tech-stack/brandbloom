@@ -75,13 +75,10 @@ async function uploadBase64ToTemp(base64: string, mimeType: string): Promise<str
  */
 async function brandPhotoWithReplicate(
   imageUrl: string,
-  prompt: string,
-  quality: "standard" | "4k" = "standard"
+  prompt: string
 ): Promise<string | null> {
   const token = process.env.REPLICATE_API_TOKEN;
   if (!token) return null;
-
-  const is4k = quality === "4k";
 
   // Use flux-1.1-pro for img2img — supports image_url as conditioning input
   const body = {
@@ -93,9 +90,8 @@ async function brandPhotoWithReplicate(
       // img2img strength — 0.75 keeps original composition, applies brand style
       prompt_strength: 0.75,
       aspect_ratio: "1:1",
-      output_quality: is4k ? 100 : 80,
-      // Larger output for 4K
-      ...(is4k ? { megapixels: "1" } : {}),
+      output_quality: 100,
+      megapixels: "1",
     },
   };
 
@@ -185,10 +181,9 @@ export async function POST(request: NextRequest) {
       imageUrl?: string;
       brand?: BrandInput;
       brandId?: string;
-      quality?: "standard" | "4k";
     };
 
-    const { imageBase64, mimeType, imageUrl: directUrl, brand, brandId, quality = "standard" } = body;
+    const { imageBase64, mimeType, imageUrl: directUrl, brand, brandId } = body;
 
     if (!imageBase64 && !directUrl) {
       return NextResponse.json(
@@ -221,7 +216,7 @@ export async function POST(request: NextRequest) {
     }
 
     const prompt = buildPhotoPrompt(brand);
-    const resultUrl = await brandPhotoWithReplicate(photoUrl, prompt, quality);
+    const resultUrl = await brandPhotoWithReplicate(photoUrl, prompt);
 
     if (!resultUrl) {
       // If Replicate not configured or failed — return a helpful error
@@ -243,7 +238,7 @@ export async function POST(request: NextRequest) {
 
     // Deduct credit
     let remainingCredits: number | undefined;
-    const creditCost = quality === "4k" ? 2 : 1;
+    const creditCost = 2;
     try {
       const updated = await prisma.user.update({
         where: { id: authUser.id },
@@ -265,8 +260,8 @@ export async function POST(request: NextRequest) {
             url: resultUrl,
             label: "Branded photo",
             type: "photo",
-            width: quality === "4k" ? 2048 : 1024,
-            height: quality === "4k" ? 2048 : 1024,
+            width: 2048,
+            height: 2048,
             prompt,
           },
         });

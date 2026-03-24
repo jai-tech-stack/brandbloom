@@ -6,8 +6,10 @@ import type { BrandIntelligence } from "@/lib/brand-intelligence";
 import { brandIntelligenceToPrismaData } from "@/lib/brand-intelligence";
 
 type CreateBrandBody = {
-  method: "url" | "logo";
+  method: "url" | "logo" | "instagram";
   url?: string;
+  instagramHandle?: string;
+  instagramUrl?: string;
   logoBase64?: string;
   logoMimeType?: string;
   brandName?: string;
@@ -18,6 +20,24 @@ type CreateBrandBody = {
   runLogoGeneration?: boolean;
 };
 
+function extractionConfidence(input: {
+  colors: string[];
+  fonts: string[];
+  logos: string[];
+  description?: string;
+  personality?: string;
+  tone?: string;
+}): number {
+  let score = 0.2;
+  if (input.logos.length > 0) score += 0.2;
+  if (input.colors.length > 0) score += 0.2;
+  if (input.fonts.length > 0) score += 0.15;
+  if ((input.description || "").trim().length > 20) score += 0.15;
+  if ((input.personality || "").trim().length > 0) score += 0.05;
+  if ((input.tone || "").trim().length > 0) score += 0.05;
+  return Math.max(0, Math.min(1, Number(score.toFixed(2))));
+}
+
 function normalizeDomain(raw: string): string {
   try {
     const withProto = raw.trim().startsWith("http") ? raw.trim() : `https://${raw.trim()}`;
@@ -25,6 +45,16 @@ function normalizeDomain(raw: string): string {
     return hostname.startsWith("www.") ? hostname.slice(4) : hostname;
   } catch {
     return raw.trim().toLowerCase().replace(/^www\./, "").split("/")[0];
+  }
+}
+
+function instagramHandleFromUrl(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl);
+    const first = parsed.pathname.split("/").filter(Boolean)[0] || "";
+    return first.replace(/^@/, "").trim().toLowerCase();
+  } catch {
+    return "";
   }
 }
 
@@ -38,16 +68,39 @@ export async function POST(request: NextRequest) {
     const body = (await request.json().catch(() => ({}))) as Partial<CreateBrandBody>;
     const method = body.method;
 
-    if (method !== "url" && method !== "logo") {
-      return NextResponse.json({ error: "method must be 'url' or 'logo'." }, { status: 400 });
+    if (method !== "url" && method !== "logo" && method !== "instagram") {
+      return NextResponse.json({ error: "method must be 'url', 'logo', or 'instagram'." }, { status: 400 });
     }
 
-    if (method === "url") {
+    if (method === "url" || method === "instagram") {
+      const hrefFromInstagram =
+        method === "instagram"
+          ? (body.instagramUrl?.trim() ||
+            (body.instagramHandle?.trim()
+              ? `https://www.instagram.com/${body.instagramHandle.replace(/^@/, "").trim()}/`
+              : ""))
+          : undefined;
+
       if (!body.url || typeof body.url !== "string") {
-        return NextResponse.json({ error: "url is required for method=url." }, { status: 400 });
+        if (method !== "instagram") {
+          return NextResponse.json({ error: "url is required for method=url." }, { status: 400 });
+        }
       }
-      const href = body.url.startsWith("http") ? body.url : `https://${body.url}`;
-      const domain = normalizeDomain(href);
+      const rawInputUrl = method === "instagram" ? hrefFromInstagram : body.url;
+      if (!rawInputUrl) {
+        return NextResponse.json({ error: "instagramHandle or instagramUrl is required for method=instagram." }, { status: 400 });
+      }
+      const href = rawInputUrl.startsWith("http") ? rawInputUrl : `https://${rawInputUrl}`;
+      const normalizedDomain = normalizeDomain(href);
+      const instagramHandle =
+        method === "instagram"
+          ? ((body.instagramHandle || "").replace(/^@/, "").trim().toLowerCase() || instagramHandleFromUrl(href))
+          : "";
+      const instagramDomainKey =
+        method === "instagram"
+          ? `instagram:${instagramHandle || "profile"}`
+          : null;
+      const domain = instagramDomainKey || normalizedDomain;
       const existing = await prisma.brand.findFirst({
         where: { userId: authUser.id, domain },
       });
@@ -59,8 +112,10 @@ export async function POST(request: NextRequest) {
       }
 
       const input: UnifiedAnalyzeInput = {
-        method: "url",
-        urlHref: href,
+        method,
+        urlHref: method === "url" ? href : undefined,
+        instagramHandle: method === "instagram" ? body.instagramHandle : undefined,
+        instagramUrl: method === "instagram" ? href : undefined,
         additionalContext: {
           tone: body.tone,
           industry: body.industry,
@@ -96,7 +151,8 @@ export async function POST(request: NextRequest) {
           domain,
           image: bi.logoUrl,
           logos: bi.logoUrl ? JSON.stringify([bi.logoUrl]) : null,
-          source: "url",
+          source: method,
+          sourceType: method,
           description: analyzed.description || body.description || null,
           deepAnalysis: JSON.stringify({
             aestheticNarrative: analyzed.aestheticNarrative ?? null,
@@ -115,6 +171,18 @@ export async function POST(request: NextRequest) {
             siteUrl: saved.siteUrl,
             colors: analyzed.colors,
             fonts: analyzed.fonts,
+          },
+          extraction: {
+            sourceType: method,
+            confidence: extractionConfidence({
+              colors: analyzed.colors,
+              fonts: analyzed.fonts,
+              logos: analyzed.logos,
+              description: analyzed.description,
+              personality: analyzed.personality,
+              tone: analyzed.tone,
+            }),
+            extractedAt: new Date().toISOString(),
           },
         },
         error: null,
@@ -188,6 +256,18 @@ export async function POST(request: NextRequest) {
           fonts: analyzed.fonts,
           personality: analyzed.personality ?? null,
           tone: analyzed.tone ?? null,
+        },
+        extraction: {
+          sourceType: "logo",
+          confidence: extractionConfidence({
+            colors: analyzed.colors,
+            fonts: analyzed.fonts,
+            logos: analyzed.logos,
+            description: analyzed.description,
+            personality: analyzed.personality,
+            tone: analyzed.tone,
+          }),
+          extractedAt: new Date().toISOString(),
         },
       },
       error: null,

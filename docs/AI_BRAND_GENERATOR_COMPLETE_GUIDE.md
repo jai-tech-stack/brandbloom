@@ -11,7 +11,7 @@ AI-powered brand asset generator (Bloom/trybloom.ai competitor). User enters a w
 | Frontend    | Next.js 14 (App Router), React 18, Tailwind CSS |
 | Backend     | Next.js API Routes (no separate server)        |
 | Brand extraction | HTML/CSS parsing; optional OpenAI for personality |
-| Image generation | Replicate — FLUX Schnell                    |
+| Image generation | Replicate — FLUX 1.1 Pro                    |
 | (Future)    | PostgreSQL, Redis/BullMQ, Stripe, S3/R2         |
 
 ---
@@ -32,7 +32,7 @@ User clicks "Create" with prompt + aspect ratio
     ↓
 POST /api/generate-assets
     → Build prompt from brand + user input
-    → Replicate FLUX Schnell (or demo placeholders)
+    → Replicate FLUX 1.1 Pro (or demo placeholders)
     ↓
 Asset grid → view / download
 ```
@@ -52,7 +52,7 @@ Asset grid → view / download
 
 ### 2. Image generation
 
-- **Service** (`src/lib/ai-generator.ts`): Wraps Replicate FLUX Schnell.
+- **Service** (`src/lib/ai-generator.ts`): Wraps Replicate FLUX 1.1 Pro.
   - Input: prompt, aspect ratio, (optional) brand colors/name.
   - Output: image URL(s).
   - Can be extended for DALL-E 3 or other providers.
@@ -111,14 +111,14 @@ model Asset {
 
 | Variable              | Required | Description |
 |-----------------------|----------|-------------|
-| `REPLICATE_API_TOKEN` | For real images | Replicate API token (FLUX Schnell) |
+| `REPLICATE_API_TOKEN` | For real images | Replicate API token (FLUX 1.1 Pro) |
 | `OPENAI_API_KEY`      | Optional | Enables AI brand personality/tone in extraction |
 
 ---
 
 ## Cost estimates
 
-- **FLUX Schnell (Replicate)**: ~\$0.003 per image.
+- **FLUX 1.1 Pro (Replicate)**: Premium-tier pricing; check current Replicate pricing.
 - **OpenAI (optional)**: ~\$0.01–0.02 per brand analysis.
 - **Hosting**: Vercel free tier for MVP; add DB/storage as you scale.
 

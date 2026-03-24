@@ -17,6 +17,11 @@ type Brand = {
   siteUrl: string;
   colors: string[] | string;
   image: string | null;
+  extraction?: {
+    confidence: number;
+    confidenceLabel: "high" | "medium" | "low";
+    sourceType: string;
+  };
   _count?: { assets: number };
 };
 
@@ -94,7 +99,7 @@ function AssetCard({ asset, onDownload, onDelete }: {
     : null;
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-2xl border border-surface-700 bg-surface-800 transition-all duration-150 hover:border-surface-500 hover:shadow-xl hover:shadow-black/30">
+    <div className="group flex flex-col overflow-hidden rounded-2xl border border-surface-700 bg-gradient-to-b from-surface-800 to-surface-800/90 ring-1 ring-white/5 transition-all duration-200 hover:-translate-y-0.5 hover:border-surface-500 hover:shadow-xl hover:shadow-black/30">
       <div className="relative aspect-square w-full overflow-hidden bg-surface-700">
         {asset.url && !imgError ? (
           <img src={asset.url} alt={asset.label}
@@ -184,14 +189,15 @@ function GhostCard({ prompt }: { prompt: string }) {
 
 // ─── Brand Card ───────────────────────────────────────────────────────────────
 
-function BrandCard({ brand, onDelete, onSelect }: {
+function BrandCard({ brand, onDelete, onSelect, onImprove }: {
   brand: Brand;
   onDelete: (id: string, name: string) => void;
   onSelect: (id: string) => void;
+  onImprove: (id: string) => void;
 }) {
   const colors = parseColors(brand.colors);
   return (
-    <div className="flex flex-col rounded-2xl border border-surface-700 bg-surface-800 p-5 transition hover:border-surface-500">
+    <div className="flex flex-col rounded-2xl border border-surface-700 bg-gradient-to-b from-surface-800 to-surface-800/90 p-5 ring-1 ring-white/5 transition-all duration-200 hover:-translate-y-0.5 hover:border-surface-500">
       <div className="flex items-start gap-3">
         {brand.image && !brand.image.endsWith(".mp4") ? (
           <Image src={brand.image} alt="" width={44} height={44} unoptimized
@@ -204,6 +210,19 @@ function BrandCard({ brand, onDelete, onSelect }: {
         <div className="min-w-0 flex-1 pt-0.5">
           <h3 className="truncate text-sm font-semibold text-white">{brand.name}</h3>
           <p className="truncate text-xs text-stone-500">{brand.domain}</p>
+          {brand.extraction && (
+            <span
+              className={`mt-1 inline-block rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                brand.extraction.confidenceLabel === "high"
+                  ? "bg-green-500/15 text-green-300"
+                  : brand.extraction.confidenceLabel === "medium"
+                  ? "bg-amber-500/15 text-amber-300"
+                  : "bg-red-500/15 text-red-300"
+              }`}
+            >
+              {brand.extraction.confidenceLabel} confidence
+            </span>
+          )}
         </div>
       </div>
 
@@ -219,6 +238,15 @@ function BrandCard({ brand, onDelete, onSelect }: {
         <p className="mb-2.5 text-[11px] text-stone-600">{brand._count?.assets ?? 0} asset{brand._count?.assets !== 1 ? "s" : ""}</p>
         <div className="flex items-center gap-2">
           <BrandKitDownload brandId={brand.id} label="PDF" />
+          {brand.extraction && brand.extraction.confidenceLabel !== "high" && (
+            <button
+              type="button"
+              onClick={() => onImprove(brand.id)}
+              className="flex h-8 items-center rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/20 transition"
+            >
+              Improve
+            </button>
+          )}
           <button type="button" onClick={() => onSelect(brand.id)}
             className="flex h-8 flex-1 items-center justify-center rounded-lg bg-brand-500/20 text-[11px] font-semibold text-brand-300 hover:bg-brand-500/30 transition">
             Create →
@@ -240,6 +268,8 @@ function CreateBar({ brands, initialBrandId, onAssetCreated }: {
   initialBrandId?: string;
   onAssetCreated: (asset: Asset) => void;
 }) {
+  const PREMIUM_QUALITY: "4k" = "4k";
+  const PREMIUM_IDEAS = true;
   const [prompt, setPrompt] = useState("");
   const [brandId, setBrandId] = useState(initialBrandId ?? brands[0]?.id ?? "");
   const [size, setSize] = useState("1024x1024");
@@ -252,7 +282,12 @@ function CreateBar({ brands, initialBrandId, onAssetCreated }: {
     if (!brandId && brands.length > 0) setBrandId(brands[0].id);
   }, [brands, brandId]);
 
-  const [w, h] = size.split("x").map(Number);
+  const sizeToAspectRatio: Record<string, string> = {
+    "1024x1024": "1:1",
+    "1024x1344": "3:4",
+    "1344x768": "16:9",
+    "1536x640": "21:9",
+  };
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -262,6 +297,7 @@ function CreateBar({ brands, initialBrandId, onAssetCreated }: {
 
     try {
       const selectedBrand = brands.find((b) => b.id === brandId);
+      const aspectRatio = sizeToAspectRatio[size] ?? "1:1";
 
       // Step 1 — generate single asset
       setState("generating");
@@ -270,10 +306,11 @@ function CreateBar({ brands, initialBrandId, onAssetCreated }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           brandId,
-          prompt: prompt.trim(),
-          width: w,
-          height: h,
-          count: 1,
+          promptOverride: prompt.trim(),
+          aspectRatio,
+          quality: PREMIUM_QUALITY,
+          premiumIdeas: PREMIUM_IDEAS,
+          limit: 1,
           // Pass brand context if available
           brandName: selectedBrand?.name,
           domain: selectedBrand?.domain,
@@ -315,7 +352,7 @@ function CreateBar({ brands, initialBrandId, onAssetCreated }: {
 
   return (
     <form onSubmit={handleGenerate}
-      className="mb-8 rounded-2xl border border-surface-700 bg-surface-800/80 p-4 backdrop-blur-sm">
+      className="mb-8 rounded-2xl border border-surface-700 bg-gradient-to-b from-surface-800/90 to-surface-800/70 p-4 ring-1 ring-white/5 backdrop-blur-sm">
 
       {/* Prompt row */}
       <div className="flex gap-3">
@@ -364,13 +401,17 @@ function CreateBar({ brands, initialBrandId, onAssetCreated }: {
 
         <div className="flex-1" />
 
+        <span className="h-9 rounded-lg border border-brand-500/40 bg-brand-500/10 px-2.5 text-[10px] font-medium uppercase tracking-wide text-brand-300 inline-flex items-center">
+          Premium mode: 4K + aesthetics + ideas
+        </span>
+
         {/* Generate */}
         <button type="submit"
           disabled={isGenerating || !prompt.trim() || !brandId}
-          className={`flex h-9 items-center gap-2 rounded-xl px-5 text-sm font-semibold transition ${
+          className={`flex h-9 items-center gap-2 rounded-xl px-5 text-sm font-semibold transition active:scale-[0.99] ${
             state === "done"
               ? "bg-green-500/20 text-green-300"
-              : "bg-brand-500 text-white hover:bg-brand-400 disabled:opacity-50"
+              : "bg-brand-500 text-white shadow-lg shadow-brand-500/20 hover:bg-brand-400 disabled:opacity-50"
           }`}>
           {isGenerating
             ? <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> {stateLabel[state]}</>
@@ -424,6 +465,7 @@ function DashboardContent() {
   const [assetTypeFilter, setAssetTypeFilter] = useState("all");
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [generatingPrompt, setGeneratingPrompt] = useState<string | null>(null);
+  const [improveStatus, setImproveStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Brand pre-selected from URL param (just added a new brand)
   const initialBrandId = searchParams?.get("brandId") ?? undefined;
@@ -454,6 +496,38 @@ function DashboardContent() {
     const res = await fetch(`/api/brands/${id}`, { method: "DELETE", credentials: "include" });
     if (res.ok) { setBrands((p) => p.filter((b) => b.id !== id)); setAssets((p) => p.filter((a) => a.brand?.id !== id)); }
     else setDeleteError("Failed to delete brand.");
+  }
+
+  async function improveBrandExtraction(id: string) {
+    try {
+      const previous = brands.find((b) => b.id === id);
+      const previousLabel = previous?.extraction?.confidenceLabel;
+      const res = await fetch(`/api/brands/${id}`, { method: "PATCH", credentials: "include" });
+      const data = await res.json().catch(() => ({})) as {
+        error?: string;
+        brand?: {
+          extraction?: { confidenceLabel?: "high" | "medium" | "low" };
+        };
+      };
+      if (!res.ok) {
+        const message = data.error ?? "Failed to improve extraction.";
+        setDeleteError(message);
+        setImproveStatus({ type: "error", message });
+        return;
+      }
+      await fetchData();
+      const nextLabel = data.brand?.extraction?.confidenceLabel;
+      const titleCase = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
+      const message =
+        previousLabel && nextLabel
+          ? `Extraction updated: ${titleCase(previousLabel)} -> ${titleCase(nextLabel)} confidence.`
+          : "Extraction improved successfully.";
+      setImproveStatus({ type: "success", message });
+    } catch {
+      const message = "Failed to improve extraction.";
+      setDeleteError(message);
+      setImproveStatus({ type: "error", message });
+    }
   }
 
   async function deleteAsset(id: string) {
@@ -498,7 +572,7 @@ function DashboardContent() {
     <main className="min-h-screen"><Header />
       <div className="mx-auto max-w-lg px-4 pt-32 text-center">
         <h1 className="mb-4 text-2xl font-bold text-white">Sign in to continue</h1>
-        <Link href="/login" className="inline-block rounded-xl bg-brand-500 px-6 py-3 font-medium text-white hover:bg-brand-400">Sign in</Link>
+        <Link href="/login" className="inline-block rounded-xl bg-brand-500 px-6 py-3 font-medium text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99]">Sign in</Link>
       </div>
     </main>
   );
@@ -511,7 +585,7 @@ function DashboardContent() {
         <div className="mb-6 text-5xl">🌱</div>
         <h1 className="mb-3 text-3xl font-bold text-white">Add your first brand</h1>
         <p className="mb-8 text-stone-400">Enter your website URL and BrandBloom will learn your brand identity in seconds.</p>
-        <Link href="/analyze" className="inline-block rounded-xl bg-brand-500 px-8 py-3 font-semibold text-white hover:bg-brand-400">
+        <Link href="/analyze" className="inline-block rounded-xl bg-brand-500 px-8 py-3 font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99]">
           Get started →
         </Link>
       </div>
@@ -528,6 +602,10 @@ function DashboardContent() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-brand-500/35 bg-brand-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />
+              Premium Workspace
+            </div>
             <h1 className="text-2xl font-bold text-white">
               {session?.user?.name ? `Hey, ${session.user.name.split(" ")[0]} 👋` : "Dashboard"}
             </h1>
@@ -535,11 +613,11 @@ function DashboardContent() {
           </div>
           <div className="flex gap-2">
             <Link href="/campaign"
-              className="rounded-xl border border-surface-600 px-4 py-2 text-sm font-medium text-stone-400 hover:border-surface-500 hover:text-white transition">
+              className="rounded-xl border border-surface-600 px-4 py-2 text-sm font-medium text-stone-400 transition hover:border-surface-500 hover:bg-surface-800/60 hover:text-white active:scale-[0.99]">
               ⚡ Campaign
             </Link>
             <Link href="/analyze"
-              className="rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-400 transition">
+              className="rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99]">
               + New Brand
             </Link>
           </div>
@@ -550,6 +628,18 @@ function DashboardContent() {
           <div className="mb-6 flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
             {deleteError}
             <button onClick={() => setDeleteError(null)} className="ml-3">×</button>
+          </div>
+        )}
+        {improveStatus && (
+          <div
+            className={`mb-6 flex items-center justify-between rounded-xl px-4 py-3 text-sm ${
+              improveStatus.type === "success"
+                ? "border border-green-500/30 bg-green-500/10 text-green-300"
+                : "border border-red-500/30 bg-red-500/10 text-red-300"
+            }`}
+          >
+            {improveStatus.message}
+            <button onClick={() => setImproveStatus(null)} className="ml-3">×</button>
           </div>
         )}
 
@@ -573,6 +663,11 @@ function DashboardContent() {
             </button>
           ))}
         </div>
+        <p className="mb-5 text-xs text-stone-500">
+          {activeTab === "create"
+            ? "Generate premium assets in 4K with brand-consistent aesthetics and ideas."
+            : "Manage your brands, confidence quality, and improve extraction where needed."}
+        </p>
 
         {/* ── Assets grid ── */}
         {activeTab === "create" && (
@@ -611,7 +706,7 @@ function DashboardContent() {
         {activeTab === "brands" && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {brands.map((b) => (
-              <BrandCard key={b.id} brand={b} onDelete={deleteBrand}
+              <BrandCard key={b.id} brand={b} onDelete={deleteBrand} onImprove={improveBrandExtraction}
                 onSelect={(id) => {
                   setActiveTab("create");
                   // Scroll to create bar

@@ -1,12 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 
 export default function SettingsPage() {
-  const { data: session, update } = useSession();
+  const { data: session, status, update } = useSession();
   const router = useRouter();
 
   const [name, setName] = useState(session?.user?.name ?? "");
@@ -54,10 +54,14 @@ export default function SettingsPage() {
     finally { setPwLoading(false); }
   }
 
-  if (!session) {
-    router.push("/login?callbackUrl=/settings");
-    return null;
-  }
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/login?callbackUrl=/settings");
+    }
+  }, [status, router]);
+
+  if (status === "loading") return null;
+  if (!session) return null;
 
   return (
     <div className="min-h-screen bg-surface-900 text-white">

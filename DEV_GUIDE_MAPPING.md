@@ -20,7 +20,7 @@ How the **Complete Development Guide** (Bloom-like BrandBloom) maps to what’s 
 
 | Guide | This repo |
 |-------|-----------|
-| **ImageGenerator** – OpenAI DALL-E 3, build prompt from brand, optional logo overlay (sharp) | **Implemented:** `src/lib/ai-generator.ts` – **Replicate (Flux Schnell)**. Builds prompt from brand context (name, colors, description). **No logo overlay.** No DALL-E. |
+| **ImageGenerator** – OpenAI DALL-E 3, build prompt from brand, optional logo overlay (sharp) | **Implemented:** `src/lib/ai-generator.ts` – **Replicate (Flux 1.1 Pro)**. Builds prompt from brand context (name, colors, description). **No logo overlay.** No DALL-E. |
 | **API:** `POST /api/generate` with brandId + prompt → generate, upload S3, save Asset, deduct credits | **API:** `POST /api/generate-assets` with url, brand (name, colors, description), optional brandId, promptOverride, aspectRatio, limit. Uses Replicate (or fallback Emergent backend); returns image URLs (no S3 upload in core flow). Saves Asset and deducts credits when logged in. |
 | **Output:** Single image, logo composited | **Output:** One or more assets (preset or custom prompt); no logo compositing. |
 

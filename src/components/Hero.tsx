@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
-type EntryMode = "website" | "logo";
+type EntryMode = "website" | "instagram" | "logo";
 
 export function Hero() {
   const [url, setUrl] = useState("");
@@ -13,6 +13,8 @@ export function Hero() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoBrandName, setLogoBrandName] = useState("");
   const [logoLoading, setLogoLoading] = useState(false);
+  const [instagramInput, setInstagramInput] = useState("");
+  const [instagramLoading, setInstagramLoading] = useState(false);
   const [urlSubmitting, setUrlSubmitting] = useState(false);
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -99,6 +101,62 @@ export function Hero() {
     }
   }
 
+  async function handleInstagramSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (status === "unauthenticated") {
+      router.push(`/login?callbackUrl=${encodeURIComponent("/#get-started")}`);
+      return;
+    }
+    const trimmed = instagramInput.trim();
+    if (!trimmed) {
+      setError("Please enter an Instagram handle or profile URL.");
+      return;
+    }
+    const handle = trimmed
+      .replace(/^https?:\/\/(www\.)?instagram\.com\//i, "")
+      .replace(/^@/, "")
+      .replace(/\/.*$/, "")
+      .trim();
+    if (!handle) {
+      setError("Please enter a valid Instagram handle.");
+      return;
+    }
+    setInstagramLoading(true);
+    try {
+      const res = await fetch("/api/brands/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          method: "instagram",
+          instagramHandle: handle,
+          instagramUrl: `https://www.instagram.com/${handle}/`,
+        }),
+      });
+      const data = await res.json().catch(() => ({})) as {
+        success?: boolean;
+        data?: { brandId?: string };
+        error?: string;
+      };
+      if (!res.ok || !data.success) {
+        setError(data.error || "Failed to create brand from Instagram.");
+        setInstagramLoading(false);
+        return;
+      }
+      const brandId = data.data?.brandId;
+      if (brandId) {
+        router.push(`/analyze?brandId=${encodeURIComponent(brandId)}&stage=review`);
+      } else {
+        setError("No brand ID returned.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setInstagramLoading(false);
+    }
+  }
+
   return (
     <section
       id="get-started"
@@ -129,6 +187,13 @@ export function Hero() {
           </button>
           <button
             type="button"
+            onClick={() => setMode("instagram")}
+            className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition ${mode === "instagram" ? "bg-brand-500 text-white" : "text-stone-400 hover:text-white"}`}
+          >
+            Start with Instagram
+          </button>
+          <button
+            type="button"
             onClick={() => setMode("logo")}
             className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition ${mode === "logo" ? "bg-brand-500 text-white" : "text-stone-400 hover:text-white"}`}
           >
@@ -154,6 +219,28 @@ export function Hero() {
               className="rounded-xl bg-brand-500 px-8 py-4 font-semibold text-white transition hover:bg-brand-400 disabled:opacity-50"
             >
               {urlSubmitting ? "Opening…" : "Get started"}
+            </button>
+          </form>
+        )}
+
+        {mode === "instagram" && (
+          <form
+            onSubmit={handleInstagramSubmit}
+            className="mx-auto flex max-w-xl flex-col gap-3 sm:flex-row"
+          >
+            <input
+              type="text"
+              value={instagramInput}
+              onChange={(e) => setInstagramInput(e.target.value)}
+              placeholder="@brandhandle or instagram.com/brandhandle"
+              className="flex-1 rounded-xl border border-surface-600 bg-surface-800 px-5 py-4 text-white placeholder:text-stone-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+            />
+            <button
+              type="submit"
+              disabled={instagramLoading}
+              className="rounded-xl bg-brand-500 px-8 py-4 font-semibold text-white transition hover:bg-brand-400 disabled:opacity-50"
+            >
+              {instagramLoading ? "Analyzing…" : "Get started"}
             </button>
           </form>
         )}

@@ -68,8 +68,8 @@ brandbloom/
 |--------|--------|--------|
 | **Brand scraping** | ✅ | Meta, colors, logos, fonts from URL |
 | **AI brand personality** | ✅ | Optional GPT-4o-mini (set `OPENAI_API_KEY`) |
-| **AI image generation** | ✅ | Replicate FLUX Schnell (~$0.003/image) |
-| **Credit system** | ✅ | 10 free on sign up; 1 credit per image when logged in |
+| **AI image generation** | ✅ | Replicate FLUX 1.1 Pro (premium mode) |
+| **Credit system** | ✅ | 10 free on sign up; premium generation costs 2 credits per image when logged in |
 | **Auth** | ✅ | NextAuth (email/password), not Clerk |
 | **Database** | ✅ | Prisma + SQLite (dev) / PostgreSQL (prod) |
 | **Stripe** | ✅ | One-time “Buy credits” + webhook to add credits |
@@ -133,7 +133,7 @@ Visit **http://localhost:3000**.
 2. **Enter URL** — Any website on the landing page.
 3. **Extract brand** — App scrapes meta, colors, logos, fonts; optional AI personality/tone.
 4. **Create dashboard** — Sidebar shows brand, colors, fonts, tone; main area: prompt, aspect ratio, idea cards, curated aesthetics.
-5. **Generate images** — Click Create or an idea/aesthetic; 1 credit per image when logged in.
+5. **Generate images** — Click Create or an idea/aesthetic; premium generation costs 2 credits per image when logged in.
 6. **View assets** — Grid with “Create more”; when logged in, assets are saved.
 7. **Buy credits** — Header “Buy credits” → Stripe Checkout (if Stripe is configured).
 
@@ -157,7 +157,7 @@ Visit **http://localhost:3000**.
 5. User clicks Create (or idea/aesthetic)
    POST /api/generate-assets
    - If logged in: check credits, decrement, save Asset(s)
-   - Replicate FLUX Schnell (or demo placeholders)
+  - Replicate FLUX 1.1 Pro (or demo placeholders)
        ↓
 6. User sees asset grid; can “Create more” or go home
 ```
@@ -168,7 +168,7 @@ Visit **http://localhost:3000**.
 
 - **Free:** 10 credits on sign up.
 - **Buy credits:** Stripe one-time payment; webhook adds credits to user.
-- **1 credit = 1 image** (when logged in).
+- **Premium generation = 2 credits per image** (when logged in).
 
 Subscription tiers (Pro $20/mo, etc.) are **not** implemented; you can add them via Stripe Products/Prices and webhook logic.
 
@@ -193,7 +193,7 @@ See **docs/DEPLOYMENT_GUIDE.md** for details.
 | Database | Prisma + SQLite (dev) / PostgreSQL (prod) |
 | Auth | NextAuth (Credentials, JWT) |
 | Payments | Stripe (checkout + webhook) |
-| AI images | Replicate FLUX Schnell |
+| AI images | Replicate FLUX 1.1 Pro |
 | AI personality | OpenAI GPT-4o-mini (optional) |
 | Styling | Tailwind CSS |
 

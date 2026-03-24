@@ -8,7 +8,7 @@ Recommendation: **use REPLICATE_API_TOKEN (Flux) for real images first, then ANT
 
 | Key | Used by | What you get |
 |-----|--------|--------------|
-| **REPLICATE_API_TOKEN** | `/api/generate-assets` → `@/lib/ai-generator` | **Real AI-generated images** (FLUX Schnell). Primary image provider; no Python image server needed. |
+| **REPLICATE_API_TOKEN** | `/api/generate-assets` → `@/lib/ai-generator` | **Real AI-generated images** (FLUX 1.1 Pro). Primary image provider; no Python image server needed. |
 | **ANTHROPIC_API_KEY** | Brand BLOOM+ backend (`backend/api/` on 8000) | **Better brand extraction** (colors, fonts, logo from CSS + Claude) and logo/asset prompts. Only used when `BACKEND_BLOOM_URL` is set. |
 | **FREEPIK_API_KEY** | Reserved for future use | Optional; for Freepik stock assets or related features. Not required for current flow. |
 | **EMERGENT_LLM_KEY** | `backend/server.py` (port 8001) | Optional **fallback** image provider. Only used if Replicate is not configured and the Emergent backend is running. |
