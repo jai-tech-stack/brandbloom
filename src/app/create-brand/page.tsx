@@ -197,7 +197,7 @@ export default function CreateBrandPage() {
 
         <div className="mt-5 space-y-3">
           <button type="button" disabled={!logoPreview} onClick={() => setStep("describe")}
-            className="w-full rounded-2xl bg-brand-500 py-3.5 font-semibold text-white transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-40">
+            className="w-full rounded-2xl bg-brand-500 py-3.5 font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40">
             Continue →
           </button>
           <p className="text-center text-xs text-stone-600">
@@ -289,7 +289,7 @@ export default function CreateBrandPage() {
               ← Back
             </button>
             <button type="button" disabled={!brandName.trim()} onClick={submit}
-              className="flex-1 rounded-2xl bg-brand-500 py-3 font-semibold text-white transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-40">
+              className="flex-1 rounded-2xl bg-brand-500 py-3 font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40">
               Build my Brand DNA →
             </button>
           </div>

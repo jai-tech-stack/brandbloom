@@ -181,21 +181,33 @@ export function Hero() {
           <button
             type="button"
             onClick={() => setMode("website")}
-            className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition ${mode === "website" ? "bg-brand-500 text-white" : "text-stone-400 hover:text-white"}`}
+            className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition ${
+              mode === "website"
+                ? "bg-brand-500 text-white shadow-lg shadow-brand-500/20 active:scale-[0.99]"
+                : "text-stone-400 hover:text-white"
+            }`}
           >
             Start with Website
           </button>
           <button
             type="button"
             onClick={() => setMode("instagram")}
-            className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition ${mode === "instagram" ? "bg-brand-500 text-white" : "text-stone-400 hover:text-white"}`}
+            className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition ${
+              mode === "instagram"
+                ? "bg-brand-500 text-white shadow-lg shadow-brand-500/20 active:scale-[0.99]"
+                : "text-stone-400 hover:text-white"
+            }`}
           >
             Start with Instagram
           </button>
           <button
             type="button"
             onClick={() => setMode("logo")}
-            className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition ${mode === "logo" ? "bg-brand-500 text-white" : "text-stone-400 hover:text-white"}`}
+            className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition ${
+              mode === "logo"
+                ? "bg-brand-500 text-white shadow-lg shadow-brand-500/20 active:scale-[0.99]"
+                : "text-stone-400 hover:text-white"
+            }`}
           >
             Start with Logo
           </button>
@@ -216,7 +228,7 @@ export function Hero() {
             <button
               type="submit"
               disabled={urlSubmitting}
-              className="rounded-xl bg-brand-500 px-8 py-4 font-semibold text-white transition hover:bg-brand-400 disabled:opacity-50"
+              className="rounded-xl bg-brand-500 px-8 py-4 font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99] disabled:opacity-50"
             >
               {urlSubmitting ? "Opening…" : "Get started"}
             </button>
@@ -238,7 +250,7 @@ export function Hero() {
             <button
               type="submit"
               disabled={instagramLoading}
-              className="rounded-xl bg-brand-500 px-8 py-4 font-semibold text-white transition hover:bg-brand-400 disabled:opacity-50"
+              className="rounded-xl bg-brand-500 px-8 py-4 font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99] disabled:opacity-50"
             >
               {instagramLoading ? "Analyzing…" : "Get started"}
             </button>
