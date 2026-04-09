@@ -28,7 +28,7 @@ export type UnifiedBrandIntelligence = {
   targetAudience?: string;
   industry?: string;
   aestheticNarrative?: string;
-  sourceType: "url" | "logo";
+  sourceType: "url" | "logo" | "instagram";
 };
 
 function toHex(color: string): string | null {
@@ -111,7 +111,7 @@ async function analyzeInstagramProfile(input: UnifiedAnalyzeInput): Promise<Unif
     targetAudience: input.additionalContext?.audience,
     industry: input.additionalContext?.industry,
     aestheticNarrative: description || undefined,
-    sourceType: "url",
+    sourceType: "instagram",
   };
 }
 

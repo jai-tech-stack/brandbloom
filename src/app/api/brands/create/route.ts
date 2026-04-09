@@ -270,6 +270,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── AI enrichment: deep strategy analysis (non-blocking, has graceful fallback) ──
+    const strategyProfile = await analyzeDeepStrategy({
+      name: analyzed.name,
+      description: analyzed.description || body.description,
+      tagline: analyzed.tagline,
+      colors: analyzed.colors,
+      fonts: analyzed.fonts,
+      aestheticNarrative: analyzed.aestheticNarrative,
+      targetAudience: analyzed.targetAudience || body.targetAudience,
+      personality: analyzed.personality,
+      tone: analyzed.tone || body.tone,
+      websiteScrapedText: analyzed.description || "",
+    }).catch(() => null);
+
     const bi: BrandIntelligence = {
       brandName: analyzed.name,
       sourceType: "logo",
@@ -282,10 +296,10 @@ export async function POST(request: NextRequest) {
       personalityTraits: analyzed.personality
         ? analyzed.personality.split(",").map((p) => p.trim()).filter(Boolean).slice(0, 6)
         : [],
-      industry: analyzed.industry ?? body.industry ?? null,
-      targetAudience: analyzed.targetAudience ?? body.targetAudience ?? null,
-      visualStyle: analyzed.aestheticNarrative ?? null,
-      brandArchetype: null,
+      industry: strategyProfile?.positioning?.category ?? analyzed.industry ?? body.industry ?? null,
+      targetAudience: strategyProfile?.audienceProfile?.primaryAudience ?? analyzed.targetAudience ?? body.targetAudience ?? null,
+      visualStyle: strategyProfile?.visualDNA?.style ?? analyzed.aestheticNarrative ?? null,
+      brandArchetype: strategyProfile?.brandArchetype ?? null,
       tagline: analyzed.tagline || null,
       mission: null,
       vision: null,
@@ -305,6 +319,9 @@ export async function POST(request: NextRequest) {
         description: analyzed.description || body.description || null,
         deepAnalysis: JSON.stringify({
           aestheticNarrative: analyzed.aestheticNarrative ?? null,
+          strategyProfile: strategyProfile ?? null,
+          messagingAngles: strategyProfile?.messagingAngles ?? [],
+          contentPillars: strategyProfile?.contentPillars ?? [],
           extractedAt: new Date().toISOString(),
         }),
       },

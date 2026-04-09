@@ -49,17 +49,17 @@ export default function RegisterPage() {
         redirect: false,
       });
       if (signInRes?.error) {
-        setError("Account created. Please sign in.");
+        setError(signInRes.error || "Auto sign-in failed. Please sign in manually.");
         setLoading(false);
-        router.push("/login");
+        setTimeout(() => router.push("/login"), 1500);
         return;
       }
       if (signInRes?.ok) {
-        window.location.replace("/");
+        window.location.replace("/dashboard");
         return;
       }
-      setError("Account created. Please sign in.");
-      router.push("/login");
+      setError("Account created but auto sign-in failed. Redirecting to login...");
+      setTimeout(() => router.push("/login"), 1000);
     } catch {
       setError("Something went wrong. Check your connection.");
     } finally {

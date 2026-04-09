@@ -352,7 +352,7 @@ export async function POST(request: NextRequest) {
       premiumIdeas: _premiumIdeas = false,
     } = body;
 
-    const resolvedPremiumIdeas = true;
+    const resolvedPremiumIdeas = _premiumIdeas;  // ✅ FIXED: respect user preference
 
     const resolvedAspect = aspectRatio === "__auto__" ? "1:1" : aspectRatio;
     const dims = dimensionsString(resolvedAspect);
@@ -426,6 +426,19 @@ export async function POST(request: NextRequest) {
 
     const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
     const hasGemini = !!process.env.PYTHON_BACKEND_URL;
+
+    // ✅ FIXED: Check that at least one generation method is available
+    if (!hasReplicate && !hasGemini) {
+      return NextResponse.json(
+        {
+          error: "Generation services not configured. Contact support or try again later.",
+          assets: [],
+          remainingCredits: userRecord?.credits ?? 0,
+        },
+        { status: 503 }
+      );
+    }
+
     const results = [];
     let replicateAttempted = false;
     let demo = false;
@@ -461,47 +474,44 @@ export async function POST(request: NextRequest) {
           prompt,
         });
       } else {
-        demo = true;
-        results.push({
-          id: `demo-${Date.now()}-${i}`,
-          url: getDemoImage(size.width, size.height, `${resolvedBrand?.name ?? "brand"}-${i}`),
-          label: promptOverride?.slice(0, 50) ?? ideaType ?? "Brand asset (placeholder)",
-          type: ideaType ?? "general",
-          width: size.width,
-          height: size.height,
-          prompt,
-        });
+        // ✅ FIXED: Return error instead of silent demo fallback
+        return NextResponse.json(
+          {
+            error: "Generation failed. Please try again or contact support.",
+            assets: [],
+            remainingCredits: userRecord?.credits ?? 0,
+          },
+          { status: 500 }
+        );
       }
     }
 
     // Deduct credits
     let remainingCredits: number | undefined;
     const creditCost = 2;
-    if (!demo) {
-      try {
-        const updated = await prisma.user.update({
-          where: { id: authUser.id },
-          data: {
-            credits: {
-              decrement: creditCost * results.filter((r) => !r.id.startsWith("demo")).length,
-            },
+    try {
+      const updated = await prisma.user.update({
+        where: { id: authUser.id },
+        data: {
+          credits: {
+            decrement: creditCost * results.length,
           },
-          select: { credits: true },
-        });
-        remainingCredits = updated.credits;
+        },
+        select: { credits: true },
+      });
+      remainingCredits = updated.credits;
 
-        // Low credit warning email at exactly 3 credits
-        if (remainingCredits === 3 && userRecord?.email) {
-          import("@/lib/email").then(({ sendLowCreditsEmail }) => {
-            sendLowCreditsEmail({
-              to: userRecord.email!,
-              name: userRecord.name ?? undefined,
-              credits: 3,
-            }).catch(() => { /* non-fatal */ });
+      // Low credit warning email at exactly 3 credits
+      if (remainingCredits === 3 && userRecord?.email) {
+        import("@/lib/email").then(({ sendLowCreditsEmail }) => {
+          sendLowCreditsEmail({
+            to: userRecord.email!,
+            name: userRecord.name ?? undefined,
+            credits: 3,
           }).catch(() => { /* non-fatal */ });
-        }
-      } catch { /* non-fatal */ }
-    }
+        }).catch(() => { /* non-fatal */ });
+      }
+    } catch { /* non-fatal */ }
 
     // Save assets to DB
     if (brandId && results.length > 0) {
@@ -526,7 +536,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       assets: results,
-      demo,
       replicateAttempted,
       credits: remainingCredits,
       promptUsed: prompt, // useful for debugging

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useRef, useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 
 // ─── Gallery ──────────────────────────────────────────────────────────────────
 const GALLERY = [
@@ -99,10 +100,15 @@ function UrlForm({ size = "lg" }: { size?: "lg" | "md" }) {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return; // Prevent double submit
     const v = url.trim();
     if (!v) { ref.current?.focus(); return; }
     setLoading(true);
-    router.push(`/analyze?url=${encodeURIComponent(v.startsWith("http") ? v : `https://${v}`)}`);
+    const finalUrl = v.startsWith("http") ? v : `https://${v}`;
+    // Small delay to prevent double submissions
+    setTimeout(() => {
+      router.push(`/analyze?url=${encodeURIComponent(finalUrl)}`);
+    }, 100);
   }
 
   const h = size === "lg" ? "h-14" : "h-12";
@@ -193,6 +199,7 @@ const FAQS = [
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function HomePage() {
+  const { data: session, status } = useSession();
   const [faq, setFaq] = useState<number | null>(null);
 
   return (
@@ -213,10 +220,20 @@ export default function HomePage() {
             <a href="#pricing"  className="transition-colors hover:text-white">Pricing</a>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/login"    className="hidden text-sm text-stone-400 transition-colors hover:text-white sm:block">Sign in</Link>
-            <Link href="/register" className="rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 transition hover:bg-brand-400 active:scale-[0.99]">
-              Start free →
-            </Link>
+            {status === "loading" ? (
+              <div className="h-4 w-24 animate-pulse rounded bg-surface-700" />
+            ) : session ? (
+              <Link href="/dashboard" className="rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 transition hover:bg-brand-400 active:scale-[0.99]">
+                Dashboard →
+              </Link>
+            ) : (
+              <>
+                <Link href="/login" className="hidden text-sm text-stone-400 transition-colors hover:text-white sm:block">Sign in</Link>
+                <Link href="/register" className="rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 transition hover:bg-brand-400 active:scale-[0.99]">
+                  Create account →
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </nav>

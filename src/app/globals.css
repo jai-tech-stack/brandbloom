@@ -77,14 +77,15 @@ html {
 /* Stagger utilities — apply to parent, children get delay */
 .reveal {
   opacity: 0;
-  animation: fadeUp 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: fadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: opacity, transform;
 }
 
-.reveal-delay-1 { animation-delay: 0.1s; }
-.reveal-delay-2 { animation-delay: 0.2s; }
-.reveal-delay-3 { animation-delay: 0.3s; }
-.reveal-delay-4 { animation-delay: 0.45s; }
-.reveal-delay-5 { animation-delay: 0.6s; }
+.reveal-delay-1 { animation-delay: 0.08s; }
+.reveal-delay-2 { animation-delay: 0.16s; }
+.reveal-delay-3 { animation-delay: 0.24s; }
+.reveal-delay-4 { animation-delay: 0.32s; }
+.reveal-delay-5 { animation-delay: 0.4s; }
 
 /* Scanning animation for product demo */
 @keyframes scan {
