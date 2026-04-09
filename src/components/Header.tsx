@@ -26,7 +26,7 @@ export function Header() {
         {status === "authenticated" && (
           <nav className="hidden items-center gap-6 text-sm text-stone-500 sm:flex">
             <Link href="/analyze" className="hover:text-white transition-colors">Create</Link>
-            <Link href="/campaign" className="hover:text-white transition-colors">Campaigns</Link>
+            <Link href="/campaigns" className="hover:text-white transition-colors">Campaigns</Link>
             <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
           </nav>
         )}

@@ -1,20 +1,12 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useRef, useCallback, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Header } from "@/components/Header";
 
-type Tab = "url" | "instagram" | "logo";
+type ExistingBrand = { id: string; name: string; domain: string };
+type Tab = "url" | "logo";
 
-type ExistingBrand = {
-  id: string;
-  name: string;
-  domain: string;
-};
-
-// ─── Domain normalization (mirrors the backend logic) ─────────────────────────
-// Must stay in sync with normalizeDomain() in extract-brand/route.ts
 function normalizeDomain(raw: string): string {
   try {
     const withProto = raw.trim().startsWith("http") ? raw.trim() : `https://${raw.trim()}`;
@@ -25,74 +17,204 @@ function normalizeDomain(raw: string): string {
   }
 }
 
-export default function AnalyzePage() {
-  const router = useRouter();
+// ── Extraction steps shown in the progress panel ──────────────────────────────
+const STEPS = [
+  { key: "scraping",  label: "Reading website",         detail: "Fetching pages, assets & metadata" },
+  { key: "analyzing", label: "Extracting brand identity",detail: "Colors, fonts, tone, archetype"    },
+  { key: "done",      label: "Building brand DNA",       detail: "Structuring your brand system"     },
+] as const;
+
+// ── Static Brand DNA preview shown in the right panel ─────────────────────────
+function BrandDNAPreview() {
+  return (
+    <div className="rounded-2xl border border-surface-600 bg-surface-800 p-5 shadow-card space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-widest text-stone-500">Brand DNA Preview</span>
+        <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-xs font-semibold text-brand-400">AI-generated</span>
+      </div>
+
+      {/* Color palette */}
+      <div>
+        <p className="mb-2 text-xs font-medium text-stone-500">Color palette</p>
+        <div className="flex gap-2">
+          {["#1a1a2e","#e94560","#0f3460","#533483","#f5a623"].map((c) => (
+            <div key={c} className="group relative">
+              <div className="h-8 w-8 rounded-lg ring-1 ring-white/10" style={{ background: c }} />
+              <span className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 rounded bg-surface-700 px-1.5 py-0.5 text-[10px] text-stone-300 opacity-0 group-hover:opacity-100 transition whitespace-nowrap">{c}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Typography */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl border border-surface-700 bg-surface-900 px-3 py-2.5">
+          <p className="text-[10px] text-stone-600 uppercase tracking-wider mb-1">Heading</p>
+          <p className="font-display italic text-sm text-white">Playfair Display</p>
+        </div>
+        <div className="rounded-xl border border-surface-700 bg-surface-900 px-3 py-2.5">
+          <p className="text-[10px] text-stone-600 uppercase tracking-wider mb-1">Body</p>
+          <p className="text-sm text-white font-sans">Inter Regular</p>
+        </div>
+      </div>
+
+      {/* Archetype + Tone */}
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          { label: "Archetype", value: "The Creator", icon: "✦" },
+          { label: "Tone",      value: "Bold · Innovative", icon: "◈" },
+        ].map(({ label, value, icon }) => (
+          <div key={label} className="rounded-xl border border-surface-700 bg-surface-900 px-3 py-2.5">
+            <p className="text-[10px] text-stone-600 uppercase tracking-wider mb-1">{label}</p>
+            <div className="flex items-center gap-1.5">
+              <span className="text-brand-400 text-xs">{icon}</span>
+              <p className="text-xs font-semibold text-white">{value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Personality traits */}
+      <div>
+        <p className="mb-2 text-[10px] text-stone-600 uppercase tracking-wider">Personality</p>
+        <div className="flex flex-wrap gap-1.5">
+          {["Innovative","Trustworthy","Bold","Approachable"].map((t) => (
+            <span key={t} className="rounded-full border border-surface-600 bg-surface-700 px-2.5 py-0.5 text-xs text-stone-300">{t}</span>
+          ))}
+        </div>
+      </div>
+
+      <p className="text-[10px] text-stone-600 text-center pt-1">← Your real brand data will appear here</p>
+    </div>
+  );
+}
+
+// ── Loading progress panel ─────────────────────────────────────────────────────
+function ExtractionProgress({ step }: { step: "scraping" | "analyzing" | "done" | "idle" }) {
+  const stepIndex = step === "idle" ? -1 : STEPS.findIndex((s) => s.key === step);
+
+  return (
+    <div className="rounded-2xl border border-surface-600 bg-surface-800 p-5 shadow-card space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-widest text-stone-500">Extraction in progress</span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-brand-400 animate-pulse" />
+          <span className="text-xs text-brand-400">Live</span>
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {STEPS.map((s, i) => {
+          const done    = i < stepIndex || step === "done";
+          const active  = i === stepIndex && step !== "done";
+          return (
+            <div key={s.key} className={`flex items-start gap-3 transition-opacity duration-500 ${i > stepIndex && step !== "done" ? "opacity-30" : "opacity-100"}`}>
+              {/* Icon */}
+              <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-all duration-300 ${
+                done   ? "bg-brand-500 text-white"  :
+                active ? "border-2 border-brand-500 bg-transparent" :
+                         "border border-surface-600 bg-surface-900"
+              }`}>
+                {done ? (
+                  <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+                    <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                ) : active ? (
+                  <span className="h-2 w-2 rounded-full bg-brand-500 animate-pulse" />
+                ) : null}
+              </div>
+              {/* Text */}
+              <div>
+                <p className={`text-sm font-medium ${active ? "text-white" : done ? "text-stone-300" : "text-stone-600"}`}>{s.label}</p>
+                {active && <p className="text-xs text-stone-500 mt-0.5">{s.detail}</p>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-1 w-full overflow-hidden rounded-full bg-surface-700">
+        <div className={`h-full rounded-full bg-brand-500 transition-all duration-700 ease-out ${
+          step === "scraping"  ? "w-[35%]" :
+          step === "analyzing" ? "w-[70%]" :
+          step === "done"      ? "w-full"  : "w-0"
+        }`} />
+      </div>
+    </div>
+  );
+}
+
+// ── Main page content ──────────────────────────────────────────────────────────
+function AnalyzeContent() {
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  const paramUrl     = searchParams?.get("url") ?? "";
+
   const [tab, setTab] = useState<Tab>("url");
-
-  // Existing brands (fetched once on mount for duplicate detection)
   const [existingBrands, setExistingBrands] = useState<ExistingBrand[]>([]);
-  const [brandsLoaded, setBrandsLoaded] = useState(false);
 
-  // URL flow
-  const [url, setUrl] = useState("");
-  const [urlLoading, setUrlLoading] = useState(false);
-  const [urlError, setUrlError] = useState("");
-  const [urlStep, setUrlStep] = useState<"idle" | "scraping" | "analyzing" | "done">("idle");
-  const [duplicateBrand, setDuplicateBrand] = useState<ExistingBrand | null>(null);
-  const [instagramInput, setInstagramInput] = useState("");
+  // URL form
+  const [url,           setUrl]           = useState(paramUrl.replace(/^https?:\/\//, ""));
+  const [urlLoading,    setUrlLoading]    = useState(false);
+  const [urlError,      setUrlError]      = useState("");
+  const [urlStep,       setUrlStep]       = useState<"idle" | "scraping" | "analyzing" | "done">("idle");
+  const [duplicateBrand,setDuplicateBrand]= useState<ExistingBrand | null>(null);
+  const autoSubmittedRef = useRef(false);
 
-  // Logo flow
-  const [logoFile, setLogoFile] = useState<File | null>(null);
+  // Logo form
+  const [logoFile,    setLogoFile]    = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [brandName, setBrandName] = useState("");
+  const [brandName,   setBrandName]   = useState("");
   const [logoLoading, setLogoLoading] = useState(false);
-  const [logoError, setLogoError] = useState("");
-  const [dragOver, setDragOver] = useState(false);
+  const [logoError,   setLogoError]   = useState("");
+  const [dragOver,    setDragOver]    = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Load existing brands for client-side duplicate detection ──────────────
+  const isLoading = urlLoading || logoLoading;
+  const activeStep = urlLoading ? urlStep : "idle";
 
+  // Load existing brands
   useEffect(() => {
     fetch("/api/brands", { credentials: "include" })
       .then((r) => r.ok ? r.json() : { brands: [] })
-      .then((d: { brands?: ExistingBrand[] }) => {
-        setExistingBrands(d.brands ?? []);
-        setBrandsLoaded(true);
-      })
-      .catch(() => setBrandsLoaded(true));
+      .then((d: { brands?: ExistingBrand[] }) => setExistingBrands(d.brands ?? []))
+      .catch(() => {});
   }, []);
 
-  // ── Real-time duplicate check as user types ───────────────────────────────
-
+  // Duplicate detection
   useEffect(() => {
-    if (!url.trim() || !brandsLoaded) {
-      setDuplicateBrand(null);
-      return;
-    }
+    if (!url.trim()) { setDuplicateBrand(null); return; }
     const domain = normalizeDomain(url);
     if (!domain || domain.length < 3) { setDuplicateBrand(null); return; }
-
     const match = existingBrands.find((b) => normalizeDomain(b.domain) === domain);
     setDuplicateBrand(match ?? null);
-  }, [url, existingBrands, brandsLoaded]);
+  }, [url, existingBrands]);
 
-  // ── URL submit ────────────────────────────────────────────────────────────
+  // Auto-submit from ?url=
+  useEffect(() => {
+    if (paramUrl && url && !autoSubmittedRef.current) {
+      autoSubmittedRef.current = true;
+      const t = setTimeout(() => {
+        handleUrlSubmit(new Event("submit") as unknown as React.FormEvent);
+      }, 400);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleUrlSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = url.trim();
-    if (!trimmed) return;
-
-    // Block if duplicate already detected client-side
-    if (duplicateBrand) return;
-
+    if (!trimmed || duplicateBrand) return;
     setUrlError("");
     setUrlLoading(true);
     setUrlStep("scraping");
 
     try {
       const withProto = trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
-      setTimeout(() => { if (urlStep !== "done") setUrlStep("analyzing"); }, 4000);
+      const analyzeTimer = setTimeout(() => setUrlStep("analyzing"), 3500);
 
       const res = await fetch("/api/brands/create", {
         method: "POST",
@@ -101,16 +223,13 @@ export default function AnalyzePage() {
         credentials: "include",
       });
 
+      clearTimeout(analyzeTimer);
       const data = await res.json().catch(() => ({})) as {
         success?: boolean;
-        data?: {
-          brandId?: string;
-          brand?: { id?: string; name?: string; domain?: string };
-        };
+        data?: { brandId?: string; brand?: { id?: string; name?: string; domain?: string } };
         error?: string;
       };
 
-      // Handle 409 — brand already exists
       if (res.status === 409) {
         const existing: ExistingBrand = {
           id: data.data?.brand?.id ?? data.data?.brandId ?? "",
@@ -124,7 +243,7 @@ export default function AnalyzePage() {
       }
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error ?? "Failed to extract brand. Check the URL and try again.");
+        throw new Error(data.error ?? "Couldn't extract brand. Check the URL and try again.");
       }
 
       const brandId = data.data?.brand?.id ?? data.data?.brandId;
@@ -136,78 +255,6 @@ export default function AnalyzePage() {
       setUrlLoading(false);
     }
   }
-
-  // ── Instagram submit ───────────────────────────────────────────────────────
-  async function handleInstagramSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = instagramInput.trim();
-    if (!trimmed) return;
-
-    setUrlError("");
-    setUrlLoading(true);
-    setUrlStep("scraping");
-    setDuplicateBrand(null);
-
-    try {
-      const handle = trimmed
-        .replace(/^https?:\/\/(www\.)?instagram\.com\//i, "")
-        .replace(/^@/, "")
-        .replace(/\/.*$/, "")
-        .trim();
-
-      if (!handle) {
-        throw new Error("Please enter a valid Instagram handle or profile URL.");
-      }
-
-      setTimeout(() => { setUrlStep("analyzing"); }, 1200);
-
-      const res = await fetch("/api/brands/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          method: "instagram",
-          instagramHandle: handle,
-          instagramUrl: `https://www.instagram.com/${handle}/`,
-        }),
-        credentials: "include",
-      });
-
-      const data = await res.json().catch(() => ({})) as {
-        success?: boolean;
-        data?: {
-          brandId?: string;
-          brand?: { id?: string; name?: string; domain?: string };
-        };
-        error?: string;
-      };
-
-      if (res.status === 409) {
-        const existing: ExistingBrand = {
-          id: data.data?.brand?.id ?? data.data?.brandId ?? "",
-          name: data.data?.brand?.name ?? handle,
-          domain: data.data?.brand?.domain ?? `instagram:${handle}`,
-        };
-        setDuplicateBrand(existing);
-        setUrlLoading(false);
-        setUrlStep("idle");
-        return;
-      }
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error ?? "Failed to analyze Instagram profile.");
-      }
-
-      const brandId = data.data?.brand?.id ?? data.data?.brandId;
-      setUrlStep("done");
-      setTimeout(() => router.push(brandId ? `/dashboard?brandId=${brandId}&new=1` : "/dashboard"), 600);
-    } catch (err) {
-      setUrlError(err instanceof Error ? err.message : "Something went wrong.");
-      setUrlStep("idle");
-      setUrlLoading(false);
-    }
-  }
-
-  // ── Logo submit ───────────────────────────────────────────────────────────
 
   const handleFile = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) return;
@@ -222,7 +269,6 @@ export default function AnalyzePage() {
     if (!logoFile) return;
     setLogoError("");
     setLogoLoading(true);
-
     try {
       const bytes = new Uint8Array(await logoFile.arrayBuffer());
       let binary = "";
@@ -231,34 +277,15 @@ export default function AnalyzePage() {
       const res = await fetch("/api/brands/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          method: "logo",
-          logoBase64: base64,
-          logoMimeType: logoFile.type || "image/png",
-          brandName: brandName.trim() || "Logo Brand",
-        }),
+        body: JSON.stringify({ method: "logo", logoBase64: base64, logoMimeType: logoFile.type || "image/png", brandName: brandName.trim() || "My Brand" }),
         credentials: "include",
       });
-
       const data = await res.json().catch(() => ({})) as {
         success?: boolean;
-        data?: {
-          brandId?: string;
-          brand?: { id?: string };
-        };
+        data?: { brandId?: string; brand?: { id?: string } };
         error?: string;
       };
-
-      if (res.status === 409) {
-        setLogoError("A brand with this name already exists in your workspace.");
-        setLogoLoading(false);
-        return;
-      }
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error ?? "Failed to analyze logo. Try again.");
-      }
-
+      if (!res.ok || !data.success) throw new Error(data.error ?? "Failed to analyze logo. Try again.");
       const brandId = data.data?.brand?.id ?? data.data?.brandId;
       router.push(brandId ? `/dashboard?brandId=${brandId}&new=1` : "/dashboard");
     } catch (err) {
@@ -267,295 +294,292 @@ export default function AnalyzePage() {
     }
   }
 
-  // ── Progress copy ─────────────────────────────────────────────────────────
-
-  const stepLabel: Record<typeof urlStep, string> = {
-    idle: "",
-    scraping: "Scanning your website…",
-    analyzing: "Extracting brand identity…",
-    done: "Brand saved! Heading to your workspace…",
-  };
-
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
-    <main className="min-h-screen bg-black">
-      <Header />
-
-      <div className="mx-auto flex min-h-[calc(100vh-64px)] max-w-xl flex-col items-center justify-center px-4 py-16">
-
-        {/* Heading */}
-        <div className="mb-10 text-center">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand-500/35 bg-brand-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />
-            Premium Brand Setup
-          </div>
-          <h1 className="text-4xl font-bold tracking-tight text-white">Add your brand</h1>
-          <p className="mt-3 text-stone-400">
-            BrandBloom learns your brand once. After that, just describe what you need.
-          </p>
-          <p className="mt-2 text-xs text-stone-500">
-            Generation runs in premium mode: 4K + premium aesthetics + premium ideas.
-          </p>
+    <div className="flex min-h-screen flex-col bg-surface-900">
+      {/* ── Top nav ─────────────────────────────────────────────────────────── */}
+      <nav className="flex h-14 shrink-0 items-center justify-between border-b border-white/[0.05] px-5 sm:px-8">
+        <Link href="/" className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-500 text-xs font-bold text-white">B</div>
+          <span className="text-sm font-bold text-white">BrandBloom</span>
+        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard" className="text-xs text-stone-500 hover:text-white transition">Dashboard</Link>
+          <Link href="/login" className="text-xs text-stone-500 hover:text-white transition">Sign in</Link>
         </div>
+      </nav>
 
-        {/* Card */}
-        <div className="w-full rounded-3xl border border-surface-700 bg-gradient-to-b from-surface-900 to-surface-900/90 p-8 shadow-2xl shadow-black/60 ring-1 ring-white/5">
+      {/* ── Main split layout ────────────────────────────────────────────────── */}
+      <div className="flex flex-1 flex-col lg:flex-row">
 
-          {/* Tabs */}
-          <div className="mb-7 flex rounded-xl border border-surface-700 bg-surface-800 p-1">
-            {(["url", "instagram", "logo"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => { setTab(t); setUrlError(""); setLogoError(""); setDuplicateBrand(null); }}
-                className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
-                  tab === t ? "bg-brand-500 text-white shadow" : "text-stone-500 hover:text-stone-300"
-                }`}
-              >
-                {t === "url" ? "🌐 Website URL" : t === "instagram" ? "📸 Instagram" : "🖼 Upload Logo"}
-              </button>
-            ))}
-          </div>
-          <p className="mb-5 rounded-lg border border-surface-700 bg-surface-800/70 px-3 py-2 text-xs text-stone-400">
-            {tab === "url"
-              ? "Best for full extraction of logos, colors, fonts, and brand voice from your site."
-              : tab === "instagram"
-              ? "Use your Instagram profile when your website is not ready yet."
-              : "Upload your logo to bootstrap a brand kit instantly."}
-          </p>
+        {/* ── LEFT: Form ──────────────────────────────────────────────────────── */}
+        <div className="flex flex-1 flex-col items-center justify-center px-5 py-12 sm:px-10 lg:max-w-xl xl:max-w-2xl">
+          <div className="w-full max-w-md">
 
-          {/* ── URL tab ── */}
-          {tab === "url" && (
-            <form onSubmit={handleUrlSubmit} className="space-y-4">
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-stone-400">
-                  Your website
-                </label>
-                <div className={`flex overflow-hidden rounded-xl border bg-surface-800 transition focus-within:border-brand-500 ${
-                  duplicateBrand ? "border-amber-500/60" : "border-surface-600"
+            {/* Eyebrow */}
+            <div className="mb-2 flex items-center gap-2">
+              <span className="h-px flex-1 bg-surface-700" />
+              <span className="text-xs font-semibold uppercase tracking-widest text-stone-600">Step 1 of 1</span>
+              <span className="h-px flex-1 bg-surface-700" />
+            </div>
+
+            {/* Headline */}
+            <div className="mb-8 text-center">
+              <h1 className="text-3xl font-bold leading-tight text-white">
+                Add your{" "}
+                <em className="font-display italic text-brand-400">brand</em>
+              </h1>
+              <p className="mt-3 text-sm leading-relaxed text-stone-500">
+                Paste your website URL and our AI will extract your full brand
+                identity — colors, fonts, voice, archetype, and more.
+              </p>
+            </div>
+
+            {/* ── Tab switcher ─────────────────────────────────────────── */}
+            <div className="mb-6 flex gap-1 rounded-xl border border-surface-700 bg-surface-800 p-1">
+              {(["url", "logo"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTab(t)}
+                  className={`flex-1 rounded-lg py-2 text-sm font-medium transition-all duration-200 ${
+                    tab === t
+                      ? "bg-surface-700 text-white shadow-sm"
+                      : "text-stone-500 hover:text-stone-300"
+                  }`}
+                >
+                  {t === "url" ? "Website URL" : "Upload Logo"}
+                </button>
+              ))}
+            </div>
+
+            {/* ── URL form ─────────────────────────────────────────────── */}
+            {tab === "url" && (
+              <form onSubmit={handleUrlSubmit} className="space-y-4">
+                {/* Input */}
+                <div className={`flex overflow-hidden rounded-xl border bg-surface-800 transition-all focus-within:border-brand-500/70 focus-within:ring-2 focus-within:ring-brand-500/20 ${
+                  duplicateBrand ? "border-amber-500/50" : "border-surface-700"
                 }`}>
-                  <span className="flex items-center pl-3.5 text-stone-600 text-sm select-none">https://</span>
+                  <span className="flex items-center pl-4 text-sm text-stone-600 select-none">https://</span>
                   <input
                     type="text"
                     value={url}
                     onChange={(e) => { setUrl(e.target.value); setUrlError(""); }}
                     placeholder="yourbrand.com"
                     disabled={urlLoading}
-                    autoFocus
-                    className="flex-1 bg-transparent px-2 py-3 text-sm text-white placeholder:text-stone-600 focus:outline-none disabled:opacity-50"
+                    autoFocus={!paramUrl}
+                    className="flex-1 bg-transparent px-2 py-3.5 text-sm text-white placeholder:text-stone-600 focus:outline-none disabled:opacity-50"
                   />
+                  {url && !urlLoading && (
+                    <button type="button" onClick={() => { setUrl(""); setUrlError(""); setDuplicateBrand(null); }}
+                      className="flex items-center pr-4 text-stone-600 hover:text-stone-400 transition">
+                      <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+                        <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                    </button>
+                  )}
                 </div>
-              </div>
 
-              {/* Duplicate warning — real time, before submission */}
-              {duplicateBrand && (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-                  <p className="text-sm font-medium text-amber-300">
-                    "{duplicateBrand.name}" is already in your workspace
-                  </p>
-                  <p className="mt-1 text-xs text-amber-400/70">
-                    Each brand can only be added once. Go to your dashboard to generate assets for it.
-                  </p>
-                  <Link
-                    href={`/dashboard?brandId=${duplicateBrand.id}`}
-                    className="mt-3 inline-block rounded-lg bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition"
-                  >
-                    Open in Dashboard →
-                  </Link>
-                </div>
-              )}
-
-              {/* Progress bar */}
-              {urlLoading && (
-                <div className="space-y-2">
-                  <div className="h-1 w-full overflow-hidden rounded-full bg-surface-700">
-                    <div className={`h-full rounded-full bg-brand-500 transition-all duration-1000 ${
-                      urlStep === "scraping" ? "w-1/3" :
-                      urlStep === "analyzing" ? "w-2/3" :
-                      urlStep === "done" ? "w-full" : "w-0"
-                    }`} />
-                  </div>
-                  <p className="text-center text-xs text-stone-500">{stepLabel[urlStep]}</p>
-                </div>
-              )}
-
-              {urlError && (
-                <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-                  {urlError}
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={urlLoading || !url.trim() || !!duplicateBrand}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99] disabled:opacity-50"
-              >
-                {urlLoading ? (
-                  <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> Analyzing…</>
-                ) : "Analyze Brand →"}
-              </button>
-            </form>
-          )}
-
-          {/* ── Instagram tab ── */}
-          {tab === "instagram" && (
-            <form onSubmit={handleInstagramSubmit} className="space-y-4">
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-stone-400">
-                  Instagram handle or profile URL
-                </label>
-                <p className="mb-2 text-xs text-stone-500">
-                  Examples: <span className="text-stone-400">@brandname</span> or
-                  <span className="text-stone-400"> instagram.com/brandname</span>
-                </p>
-                <div className={`flex overflow-hidden rounded-xl border bg-surface-800 transition focus-within:border-brand-500 ${
-                  duplicateBrand ? "border-amber-500/60" : "border-surface-600"
-                }`}>
-                  <span className="flex items-center pl-3.5 text-stone-600 text-sm select-none">@</span>
-                  <input
-                    type="text"
-                    value={instagramInput}
-                    onChange={(e) => { setInstagramInput(e.target.value); setUrlError(""); setDuplicateBrand(null); }}
-                    placeholder="brandhandle or instagram.com/brandhandle"
-                    disabled={urlLoading}
-                    autoFocus
-                    className="flex-1 bg-transparent px-2 py-3 text-sm text-white placeholder:text-stone-600 focus:outline-none disabled:opacity-50"
-                  />
-                </div>
-              </div>
-
-              {duplicateBrand && (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-                  <p className="text-sm font-medium text-amber-300">
-                    "{duplicateBrand.name}" is already in your workspace
-                  </p>
-                  <Link
-                    href={`/dashboard?brandId=${duplicateBrand.id}`}
-                    className="mt-3 inline-block rounded-lg bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition"
-                  >
-                    Open in Dashboard →
-                  </Link>
-                </div>
-              )}
-
-              {urlLoading && (
-                <div className="space-y-2">
-                  <div className="h-1 w-full overflow-hidden rounded-full bg-surface-700">
-                    <div className={`h-full rounded-full bg-brand-500 transition-all duration-1000 ${
-                      urlStep === "scraping" ? "w-1/3" :
-                      urlStep === "analyzing" ? "w-2/3" :
-                      urlStep === "done" ? "w-full" : "w-0"
-                    }`} />
-                  </div>
-                  <p className="text-center text-xs text-stone-500">{stepLabel[urlStep]}</p>
-                </div>
-              )}
-
-              {urlError && (
-                <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-                  {urlError}
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={urlLoading || !instagramInput.trim() || !!duplicateBrand}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99] disabled:opacity-50"
-              >
-                {urlLoading ? (
-                  <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> Analyzing…</>
-                ) : "Analyze Instagram Brand →"}
-              </button>
-            </form>
-          )}
-
-          {/* ── Logo tab ── */}
-          {tab === "logo" && (
-            <form onSubmit={handleLogoSubmit} className="space-y-4">
-              {/* Drop zone */}
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
-                onClick={() => fileInputRef.current?.click()}
-                className={`relative flex min-h-[160px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed transition ${
-                  dragOver ? "border-brand-500 bg-brand-500/5" : "border-surface-600 hover:border-surface-500"
-                }`}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-                />
-                {logoPreview ? (
-                  <img src={logoPreview} alt="Logo preview" className="max-h-28 max-w-[200px] object-contain" />
-                ) : (
-                  <>
-                    <span className="text-3xl">🖼</span>
-                    <div className="text-center">
-                      <p className="text-sm font-medium text-white">Drop your logo here</p>
-                      <p className="text-xs text-stone-500">or click to browse · PNG, JPG, SVG, WebP</p>
+                {/* Duplicate warning */}
+                {duplicateBrand && (
+                  <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-4 py-3">
+                    <span className="mt-0.5 text-amber-400 shrink-0">⚠</span>
+                    <div>
+                      <p className="text-sm font-medium text-amber-300">
+                        &ldquo;{duplicateBrand.name}&rdquo; is already in your workspace
+                      </p>
+                      <Link
+                        href={duplicateBrand.id ? `/dashboard?brandId=${duplicateBrand.id}` : "/dashboard"}
+                        className="mt-1.5 inline-block text-xs font-semibold text-amber-400 underline underline-offset-2 hover:text-amber-300"
+                      >
+                        Open in dashboard →
+                      </Link>
                     </div>
-                  </>
+                  </div>
                 )}
-              </div>
 
-              {logoPreview && (
-                <button type="button" onClick={() => { setLogoFile(null); setLogoPreview(null); }}
-                  className="text-xs text-stone-600 hover:text-stone-400">
-                  Remove logo ×
+                {/* Error */}
+                {urlError && (
+                  <div className="flex items-start gap-3 rounded-xl border border-red-500/25 bg-red-500/8 px-4 py-3">
+                    <span className="mt-0.5 text-red-400 shrink-0">✕</span>
+                    <p className="text-sm text-red-400">{urlError}</p>
+                  </div>
+                )}
+
+                {/* CTA */}
+                <button
+                  type="submit"
+                  disabled={urlLoading || !!duplicateBrand || !url.trim()}
+                  className="group relative w-full overflow-hidden rounded-xl bg-brand-500 py-3.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 transition-all hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.99]"
+                >
+                  <span className={`transition-opacity ${urlLoading ? "opacity-0" : "opacity-100"}`}>
+                    Extract Brand Identity →
+                  </span>
+                  {urlLoading && (
+                    <span className="absolute inset-0 flex items-center justify-center gap-2">
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity=".25"/>
+                        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+                      </svg>
+                      <span>Analyzing…</span>
+                    </span>
+                  )}
                 </button>
-              )}
 
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-stone-400">
-                  Brand name <span className="text-stone-600">(recommended)</span>
-                </label>
+                {/* Trust indicators */}
+                <div className="flex items-center justify-center gap-4 pt-1">
+                  {["Free to start","No card needed","~10 sec"].map((t) => (
+                    <span key={t} className="flex items-center gap-1 text-xs text-stone-600">
+                      <span className="text-brand-500/60">✓</span> {t}
+                    </span>
+                  ))}
+                </div>
+              </form>
+            )}
+
+            {/* ── Logo form ─────────────────────────────────────────────── */}
+            {tab === "logo" && (
+              <form onSubmit={handleLogoSubmit} className="space-y-4">
                 <input
                   type="text"
                   value={brandName}
                   onChange={(e) => setBrandName(e.target.value)}
-                  placeholder="Acme Corp"
-                  className="w-full rounded-xl border border-surface-600 bg-surface-800 px-3.5 py-2.5 text-sm text-white placeholder:text-stone-600 focus:border-brand-500 focus:outline-none"
+                  placeholder="Brand name (optional)"
+                  className="w-full rounded-xl border border-surface-700 bg-surface-800 px-4 py-3 text-sm text-white placeholder:text-stone-600 transition focus:border-brand-500/70 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 />
-              </div>
 
-              {logoError && (
-                <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-                  {logoError}
-                </p>
-              )}
+                {/* Drop zone */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`group flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed py-10 transition-all duration-200 ${
+                    dragOver
+                      ? "border-brand-500 bg-brand-500/10 scale-[1.01]"
+                      : logoPreview
+                      ? "border-brand-500/30 bg-surface-800/60"
+                      : "border-surface-700 bg-surface-800/50 hover:border-surface-600 hover:bg-surface-800"
+                  }`}
+                >
+                  {logoPreview ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <img src={logoPreview} alt="Logo preview" className="h-20 w-20 rounded-xl object-contain" />
+                      <p className="text-xs text-stone-500">{logoFile?.name}</p>
+                      <p className="text-xs text-brand-400 underline underline-offset-2">Change file</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-surface-600 bg-surface-700 group-hover:border-brand-500/40 transition">
+                        <svg className="h-5 w-5 text-stone-500" viewBox="0 0 24 24" fill="none">
+                          <path d="M12 5v14M5 12l7-7 7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-stone-400">Drop your logo or <span className="text-brand-400">browse</span></p>
+                        <p className="mt-0.5 text-xs text-stone-600">PNG, JPG, SVG · up to 10 MB</p>
+                      </div>
+                    </>
+                  )}
+                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+                </div>
 
-              <button
-                type="submit"
-                disabled={logoLoading || !logoFile}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[0.99] disabled:opacity-50"
-              >
-                {logoLoading ? (
-                  <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> Analyzing…</>
-                ) : "Analyze Brand →"}
-              </button>
-            </form>
-          )}
+                {logoError && (
+                  <div className="flex items-start gap-3 rounded-xl border border-red-500/25 bg-red-500/8 px-4 py-3">
+                    <span className="mt-0.5 text-red-400 shrink-0">✕</span>
+                    <p className="text-sm text-red-400">{logoError}</p>
+                  </div>
+                )}
 
-          <div className="mt-6 grid grid-cols-3 gap-2 rounded-xl border border-surface-700 bg-surface-800/50 p-2 text-center text-[11px] text-stone-400">
-            <span className="rounded-lg bg-surface-800 px-2 py-1">Fast extraction</span>
-            <span className="rounded-lg bg-surface-800 px-2 py-1">Editable brand DNA</span>
-            <span className="rounded-lg bg-surface-800 px-2 py-1">Premium-ready assets</span>
+                <button
+                  type="submit"
+                  disabled={logoLoading || !logoFile}
+                  className="group relative w-full overflow-hidden rounded-xl bg-brand-500 py-3.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 transition-all hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.99]"
+                >
+                  <span className={`transition-opacity ${logoLoading ? "opacity-0" : "opacity-100"}`}>
+                    Analyze Logo →
+                  </span>
+                  {logoLoading && (
+                    <span className="absolute inset-0 flex items-center justify-center gap-2">
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity=".25"/>
+                        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+                      </svg>
+                      <span>Analyzing…</span>
+                    </span>
+                  )}
+                </button>
+              </form>
+            )}
+
+            <p className="mt-6 text-center text-xs text-stone-600">
+              Already have a brand?{" "}
+              <Link href="/dashboard" className="text-stone-400 underline underline-offset-2 hover:text-white transition">
+                Go to dashboard
+              </Link>
+            </p>
           </div>
         </div>
 
-        {/* Footer link */}
-        <p className="mt-6 text-sm text-stone-600">
-          Already set up?{" "}
-          <Link href="/dashboard" className="text-brand-400 hover:text-brand-300">
-            Go to dashboard →
-          </Link>
-        </p>
+        {/* ── RIGHT: Preview panel (desktop only) ──────────────────────────── */}
+        <div className="hidden lg:flex lg:flex-1 items-center justify-center border-l border-white/[0.04] bg-surface-800/30 px-10 py-12">
+          <div className="w-full max-w-sm space-y-4">
+
+            {/* Panel header */}
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold text-white">
+                What you&rsquo;ll{" "}
+                <em className="font-display italic text-brand-400">get</em>
+              </h2>
+              <p className="mt-1 text-xs text-stone-500">
+                A complete brand system extracted from your website in seconds.
+              </p>
+            </div>
+
+            {/* Show extraction steps while loading, preview otherwise */}
+            {isLoading && activeStep !== "idle" ? (
+              <ExtractionProgress step={activeStep} />
+            ) : (
+              <BrandDNAPreview />
+            )}
+
+            {/* Feature bullets */}
+            <div className="space-y-2 pt-2">
+              {[
+                ["✦", "Color palette", "Primary, secondary + semantic roles"],
+                ["◈", "Typography",    "Heading + body fonts with scale"],
+                ["◉", "Brand voice",   "Tone, archetype & personality traits"],
+                ["◇", "Strategy",      "Positioning, audience & differentiators"],
+                ["▸", "Asset ready",   "Generate social, ads, decks instantly"],
+              ].map(([icon, title, sub]) => (
+                <div key={title} className="flex items-start gap-3 rounded-xl border border-surface-700/50 bg-surface-800/40 px-4 py-3">
+                  <span className="mt-0.5 text-xs text-brand-400 shrink-0">{icon}</span>
+                  <div>
+                    <p className="text-xs font-semibold text-stone-300">{title}</p>
+                    <p className="text-xs text-stone-600">{sub}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
       </div>
-    </main>
+    </div>
+  );
+}
+
+export default function AnalyzePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-surface-900">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+          <p className="text-xs text-stone-600">Loading…</p>
+        </div>
+      </div>
+    }>
+      <AnalyzeContent />
+    </Suspense>
   );
 }

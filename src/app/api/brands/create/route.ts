@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { analyzeBrand, type UnifiedAnalyzeInput } from "@/lib/brand/unified-analyzer";
 import type { BrandIntelligence } from "@/lib/brand-intelligence";
 import { brandIntelligenceToPrismaData } from "@/lib/brand-intelligence";
+import { analyzeDeepStrategy } from "@/lib/brand/deepStrategyAnalysis";
+import { OpenAIKeyRequiredError } from "@/lib/logo-brand-analysis";
 
 type CreateBrandBody = {
   method: "url" | "logo" | "instagram";
@@ -72,6 +74,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "method must be 'url', 'logo', or 'instagram'." }, { status: 400 });
     }
 
+    // ── URL / Instagram path ──────────────────────────────────────────────────
     if (method === "url" || method === "instagram") {
       const hrefFromInstagram =
         method === "instagram"
@@ -101,12 +104,22 @@ export async function POST(request: NextRequest) {
           ? `instagram:${instagramHandle || "profile"}`
           : null;
       const domain = instagramDomainKey || normalizedDomain;
+
+      // ── Duplicate check — return existing brand ID so frontend can navigate ──
       const existing = await prisma.brand.findFirst({
         where: { userId: authUser.id, domain },
+        select: { id: true, name: true, domain: true, siteUrl: true },
       });
       if (existing) {
         return NextResponse.json(
-          { success: false, data: null, error: `Brand already exists for ${domain}.` },
+          {
+            success: false,
+            data: {
+              brandId: existing.id,
+              brand: { id: existing.id, name: existing.name, domain: existing.domain },
+            },
+            error: `Brand already exists for ${domain}.`,
+          },
           { status: 409 }
         );
       }
@@ -123,6 +136,21 @@ export async function POST(request: NextRequest) {
         },
       };
       const analyzed = await analyzeBrand(input);
+
+      // ── AI enrichment: deep strategy analysis (non-blocking, has graceful fallback) ──
+      const strategyProfile = await analyzeDeepStrategy({
+        name: analyzed.name,
+        description: analyzed.description || body.description,
+        tagline: analyzed.tagline,
+        colors: analyzed.colors,
+        fonts: analyzed.fonts,
+        aestheticNarrative: analyzed.aestheticNarrative,
+        targetAudience: analyzed.targetAudience || body.targetAudience,
+        personality: analyzed.personality,
+        tone: analyzed.tone || body.tone,
+        websiteScrapedText: analyzed.description || "",
+      }).catch(() => null);
+
       const bi: BrandIntelligence = {
         brandName: analyzed.name,
         sourceType: "url",
@@ -131,17 +159,21 @@ export async function POST(request: NextRequest) {
         secondaryColors: analyzed.colors.slice(1, 6),
         headingFont: analyzed.fonts[0] ?? null,
         bodyFont: analyzed.fonts[1] ?? analyzed.fonts[0] ?? null,
-        toneOfVoice: analyzed.tone ?? null,
-        personalityTraits: analyzed.personality ? analyzed.personality.split(",").map((p) => p.trim()).filter(Boolean).slice(0, 6) : [],
-        industry: analyzed.industry ?? null,
-        targetAudience: analyzed.targetAudience ?? null,
-        visualStyle: analyzed.aestheticNarrative ?? null,
-        brandArchetype: null,
+        // Prefer AI-enriched strategy fields over scraped fallbacks
+        toneOfVoice: analyzed.tone ?? body.tone ?? null,
+        personalityTraits: analyzed.personality
+          ? analyzed.personality.split(",").map((p) => p.trim()).filter(Boolean).slice(0, 6)
+          : [],
+        industry: strategyProfile?.positioning?.category ?? analyzed.industry ?? body.industry ?? null,
+        targetAudience: strategyProfile?.audienceProfile?.primaryAudience ?? analyzed.targetAudience ?? body.targetAudience ?? null,
+        visualStyle: strategyProfile?.visualDNA?.style ?? analyzed.aestheticNarrative ?? null,
+        brandArchetype: strategyProfile?.brandArchetype ?? null,
         tagline: analyzed.tagline || null,
         mission: null,
         vision: null,
         brandStory: body.description ?? analyzed.description ?? null,
       };
+
       const canonical = brandIntelligenceToPrismaData(bi);
       const saved = await prisma.brand.create({
         data: {
@@ -156,10 +188,14 @@ export async function POST(request: NextRequest) {
           description: analyzed.description || body.description || null,
           deepAnalysis: JSON.stringify({
             aestheticNarrative: analyzed.aestheticNarrative ?? null,
+            strategyProfile: strategyProfile ?? null,
+            messagingAngles: strategyProfile?.messagingAngles ?? [],
+            contentPillars: strategyProfile?.contentPillars ?? [],
             extractedAt: new Date().toISOString(),
           }),
         },
       });
+
       return NextResponse.json({
         success: true,
         data: {
@@ -189,6 +225,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // ── Logo path ─────────────────────────────────────────────────────────────
     if (!body.logoBase64 || typeof body.logoBase64 !== "string") {
       return NextResponse.json({ error: "logoBase64 is required for method=logo." }, { status: 400 });
     }
@@ -207,7 +244,32 @@ export async function POST(request: NextRequest) {
         audience: body.targetAudience,
       },
     };
-    const analyzed = await analyzeBrand(input);
+
+    let analyzed;
+    try {
+      analyzed = await analyzeBrand(input);
+    } catch (err) {
+      // OpenAI Vision not configured — create a basic brand with provided name
+      if (err instanceof OpenAIKeyRequiredError) {
+        analyzed = {
+          name: body.brandName,
+          description: body.description ?? "",
+          tagline: "",
+          colors: [] as string[],
+          fonts: [] as string[],
+          logos: [] as string[],
+          personality: body.tone ?? undefined,
+          tone: body.tone ?? undefined,
+          targetAudience: body.targetAudience ?? undefined,
+          industry: body.industry ?? undefined,
+          aestheticNarrative: undefined as string | undefined,
+          sourceType: "logo" as const,
+        };
+      } else {
+        throw err;
+      }
+    }
+
     const bi: BrandIntelligence = {
       brandName: analyzed.name,
       sourceType: "logo",
@@ -216,10 +278,12 @@ export async function POST(request: NextRequest) {
       secondaryColors: analyzed.colors.slice(1, 6),
       headingFont: analyzed.fonts[0] ?? null,
       bodyFont: analyzed.fonts[1] ?? analyzed.fonts[0] ?? null,
-      toneOfVoice: analyzed.tone ?? null,
-      personalityTraits: analyzed.personality ? analyzed.personality.split(",").map((p) => p.trim()).filter(Boolean).slice(0, 6) : [],
-      industry: analyzed.industry ?? null,
-      targetAudience: analyzed.targetAudience ?? null,
+      toneOfVoice: analyzed.tone ?? body.tone ?? null,
+      personalityTraits: analyzed.personality
+        ? analyzed.personality.split(",").map((p) => p.trim()).filter(Boolean).slice(0, 6)
+        : [],
+      industry: analyzed.industry ?? body.industry ?? null,
+      targetAudience: analyzed.targetAudience ?? body.targetAudience ?? null,
       visualStyle: analyzed.aestheticNarrative ?? null,
       brandArchetype: null,
       tagline: analyzed.tagline || null,
@@ -227,6 +291,7 @@ export async function POST(request: NextRequest) {
       vision: null,
       brandStory: body.description ?? analyzed.description ?? null,
     };
+
     const canonical = brandIntelligenceToPrismaData(bi);
     const saved = await prisma.brand.create({
       data: {

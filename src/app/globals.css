@@ -7,17 +7,6 @@
   --foreground: #fafaf9;
   --brand: #ea751d;
   --brand-muted: #b54412;
-  /* Typography scale — use for consistency */
-  --text-h1: 1.875rem;
-  --text-h2: 1.5rem;
-  --text-h3: 1.125rem;
-  --text-body: 1rem;
-  --text-small: 0.875rem;
-  --text-caption: 0.75rem;
-  /* Spacing — consistent margins */
-  --space-section: 1.5rem;
-  --space-block: 1rem;
-  --space-inline: 0.5rem;
 }
 
 body {
@@ -25,21 +14,141 @@ body {
   background: var(--background);
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
-}
-
-/* Smooth scroll */
 html {
   scroll-behavior: smooth;
 }
 
-/* Gradient mesh background */
+/* ── Display / editorial font ──────────────────────────────────────────────── */
+.font-display {
+  font-family: var(--font-display), Georgia, "Times New Roman", serif;
+}
+
+/* ── Gradient mesh hero background ────────────────────────────────────────── */
 .gradient-mesh {
-  background: 
+  background:
     radial-gradient(ellipse 80% 50% at 50% -20%, rgba(234, 117, 29, 0.15), transparent),
     radial-gradient(ellipse 60% 40% at 100% 0%, rgba(234, 117, 29, 0.08), transparent),
     radial-gradient(ellipse 60% 40% at 0% 0%, rgba(234, 117, 29, 0.06), transparent);
+}
+
+/* ── Card shadow system (Pomelli-grade) ────────────────────────────────────── */
+.shadow-card {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.shadow-card-hover {
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.5),
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+/* ── Scroll-triggered reveal animations ────────────────────────────────────── */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Stagger utilities — apply to parent, children get delay */
+.reveal {
+  opacity: 0;
+  animation: fadeUp 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.reveal-delay-1 { animation-delay: 0.1s; }
+.reveal-delay-2 { animation-delay: 0.2s; }
+.reveal-delay-3 { animation-delay: 0.3s; }
+.reveal-delay-4 { animation-delay: 0.45s; }
+.reveal-delay-5 { animation-delay: 0.6s; }
+
+/* Scanning animation for product demo */
+@keyframes scan {
+  0%   { width: 0%; }
+  40%  { width: 45%; }
+  70%  { width: 72%; }
+  85%  { width: 88%; }
+  100% { width: 100%; }
+}
+
+.animate-scan {
+  animation: scan 3.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Typing cursor blink */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+.animate-cursor {
+  animation: blink 1s step-end infinite;
+}
+
+/* Subtle shimmer for loading states */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.03) 0%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.03) 100%
+  );
+  background-size: 200% auto;
+  animation: shimmer 2s linear infinite;
+}
+
+/* ── Selection color ──────────────────────────────────────────────────────── */
+::selection {
+  background: rgba(234, 117, 29, 0.3);
+  color: #fff;
+}
+
+/* ── Scrollbar (minimal) ──────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* ── Text balance utility ─────────────────────────────────────────────────── */
+.text-balance {
+  text-wrap: balance;
 }

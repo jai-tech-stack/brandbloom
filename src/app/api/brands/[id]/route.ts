@@ -128,6 +128,36 @@ export async function PATCH(
       return NextResponse.json({ error: "Brand not found" }, { status: 404 });
     }
 
+    // ── Brand Lock update ─────────────────────────────────────────────────────
+    const body = await request.json().catch(() => null) as {
+      action?: string;
+      isBrandLockEnabled?: boolean;
+      designConstraints?: Record<string, unknown>;
+    } | null;
+
+    if (body?.action === "lock") {
+      const updated = await prisma.brand.update({
+        where: { id },
+        data: {
+          isBrandLockEnabled: body.isBrandLockEnabled ?? false,
+          designConstraints: body.designConstraints
+            ? JSON.stringify(body.designConstraints)
+            : null,
+        },
+      });
+      return NextResponse.json({
+        success: true,
+        brand: {
+          id: updated.id,
+          isBrandLockEnabled: updated.isBrandLockEnabled,
+          designConstraints: updated.designConstraints
+            ? JSON.parse(updated.designConstraints)
+            : null,
+        },
+      });
+    }
+
+    // ── Re-extraction ─────────────────────────────────────────────────────────
     const sourceType = brand.sourceType === "instagram" ? "instagram" : brand.sourceType === "logo" ? "logo" : "url";
     if (sourceType === "logo") {
       return NextResponse.json({ error: "Logo-based brands cannot be re-extracted yet." }, { status: 400 });

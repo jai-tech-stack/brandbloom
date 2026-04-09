@@ -1,11 +1,16 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import GoogleProvider from "next-auth/providers/google";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db";
 
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+    }),
     CredentialsProvider({
       name: "credentials",
       credentials: {
@@ -32,12 +37,30 @@ export const authOptions: NextAuthOptions = {
   ],
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
   callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.email = user.email ?? undefined;
-        token.name = user.name ?? undefined;
-        token.credits = (user as { credits?: number }).credits;
+    async jwt({ token, user, account }) {
+      if (user && account) {
+        if (account.provider === "google") {
+          // Find or create DB user for Google OAuth
+          const email = user.email?.toLowerCase();
+          if (email) {
+            let dbUser = await prisma.user.findUnique({ where: { email } });
+            if (!dbUser) {
+              dbUser = await prisma.user.create({
+                data: { email, name: user.name ?? null, credits: 10 },
+              });
+            }
+            token.id = dbUser.id;
+            token.email = email;
+            token.name = dbUser.name ?? undefined;
+            token.credits = dbUser.credits;
+          }
+        } else {
+          // Credentials provider
+          token.id = user.id;
+          token.email = user.email ?? undefined;
+          token.name = user.name ?? undefined;
+          token.credits = (user as { credits?: number }).credits;
+        }
       }
       return token;
     },

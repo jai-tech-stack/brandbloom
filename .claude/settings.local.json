@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rmdir \"c:/Users/Origami/Desktop/website/brandbloom/src/app/api/campaign/plan\")",
+      "Bash(rmdir \"c:/Users/Origami/Desktop/website/brandbloom/src/app/api/campaign/generate-assets\")",
+      "Bash(rmdir \"c:/Users/Origami/Desktop/website/brandbloom/src/app/api/campaign\")",
+      "Bash(rmdir \"c:/Users/Origami/Desktop/website/brandbloom/src/app/api/extract-brand-from-logo\")",
+      "Bash(rmdir \"c:/Users/Origami/Desktop/website/brandbloom/src/app/api/extract-brand\")",
+      "WebFetch(domain:www.trybloom.ai)",
+      "WebFetch(domain:labs.google.com)",
+      "WebFetch(domain:blog.google)"
+    ]
+  }
+}
