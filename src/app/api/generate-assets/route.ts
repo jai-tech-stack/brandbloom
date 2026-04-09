@@ -289,10 +289,10 @@ async function generateWithReplicate(
 
 // ─── 4. Gemini via Python server.py ──────────────────────────────────────────
 async function generateWithGemini(prompt: string): Promise<string | null> {
-  const backendUrl = process.env.PYTHON_BACKEND_URL;
-  if (!backendUrl) return null;
+  const imageUrl = process.env.PYTHON_IMAGE_URL;
+  if (!imageUrl) return null;
   try {
-    const res = await fetch(`${backendUrl}/api/generate-image`, {
+    const res = await fetch(`${imageUrl}/api/generate-image`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt, session_id: `bb-${Date.now()}` }),
@@ -425,7 +425,7 @@ export async function POST(request: NextRequest) {
     }
 
     const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
-    const hasGemini = !!process.env.PYTHON_BACKEND_URL;
+    const hasGemini = !!process.env.PYTHON_IMAGE_URL;
 
     // ✅ FIXED: Check that at least one generation method is available
     if (!hasReplicate && !hasGemini) {
