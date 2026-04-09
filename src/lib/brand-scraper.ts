@@ -30,6 +30,22 @@ export type ScrapedBrand = {
   jsonLd?: JsonLdBrand;
 };
 
+function normalizeAssetUrl(raw: string, baseUrl: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  let absolute = trimmed;
+  if (trimmed.startsWith("//")) {
+    absolute = `https:${trimmed}`;
+  } else if (!/^https?:\/\//i.test(trimmed)) {
+    try {
+      absolute = new URL(trimmed, baseUrl).href;
+    } catch {
+      return trimmed;
+    }
+  }
+  return absolute.startsWith("http://") ? `https://${absolute.slice(7)}` : absolute;
+}
+
 /**
  * Fetches the URL and extracts brand data from HTML/CSS.
  * If the page links to Elementor stylesheets, fetches them too so global color variables are detected.
@@ -87,7 +103,7 @@ function extractBrandFromHtml(html: string, siteUrl: string): ScrapedBrand {
   const ogImage = getMeta(html, "og:image");
   const colors = extractColors(html);
   if (themeColor && !colors.includes(normalizeHex(themeColor))) colors.unshift(normalizeHex(themeColor));
-  const image = ogImage ? (ogImage.startsWith("http") ? ogImage : new URL(ogImage, siteUrl).href) : null;
+  const image = ogImage ? normalizeAssetUrl(ogImage, siteUrl) : null;
   const logos = extractLogos(html, siteUrl);
   const fonts = extractFonts(html);
   const socialAccounts = extractSocialAccounts(html, siteUrl);
@@ -414,7 +430,7 @@ function extractLogos(html: string, siteUrl: string): string[] {
     const alt = (match[2] || "").toLowerCase();
     const srcLower = src.toLowerCase();
     if (alt.includes("logo") || srcLower.includes("logo")) {
-      const full = src.startsWith("http") ? src : new URL(src, base).href;
+      const full = normalizeAssetUrl(src, base.href);
       if (!seen.has(full)) {
         seen.add(full);
         out.push(full);
@@ -427,7 +443,7 @@ function extractLogos(html: string, siteUrl: string): string[] {
   logoPathRe.lastIndex = 0;
   while ((match = logoPathRe.exec(html)) !== null) {
     const src = match[1].trim();
-    const full = src.startsWith("http") ? src : new URL(src, base).href;
+    const full = normalizeAssetUrl(src, base.href);
     if (!seen.has(full)) {
       seen.add(full);
       out.push(full);

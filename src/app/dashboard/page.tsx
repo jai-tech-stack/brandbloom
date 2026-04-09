@@ -48,6 +48,12 @@ function parseColors(raw: string[] | string | null | undefined): string[] {
   try { const p = JSON.parse(raw); return Array.isArray(p) ? p : []; } catch { return []; }
 }
 
+function forceHttps(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("//")) return `https:${url}`;
+  return url.startsWith("http://") ? `https://${url.slice(7)}` : url;
+}
+
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
 const IconDownload = () => (
@@ -663,7 +669,7 @@ function Sidebar({ brands, selectedBrandId, onSelectBrand, onDeleteBrand, onImpr
               >
                 {/* Logo / initial */}
                 {brand.image && !brand.image.endsWith(".mp4") ? (
-                  <Image src={brand.image} alt="" width={28} height={28} unoptimized
+                  <Image src={forceHttps(brand.image) ?? brand.image} alt="" width={28} height={28} unoptimized
                     className="h-7 w-7 shrink-0 rounded-lg object-cover" />
                 ) : (
                   <div

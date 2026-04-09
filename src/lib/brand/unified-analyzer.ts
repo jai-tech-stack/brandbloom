@@ -31,6 +31,13 @@ export type UnifiedBrandIntelligence = {
   sourceType: "url" | "logo" | "instagram";
 };
 
+function forceHttps(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.startsWith("//")) return `https:${trimmed}`;
+  return trimmed.startsWith("http://") ? `https://${trimmed.slice(7)}` : trimmed;
+}
+
 function toHex(color: string): string | null {
   const s = color.trim();
   if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s)) {
@@ -105,7 +112,7 @@ async function analyzeInstagramProfile(input: UnifiedAnalyzeInput): Promise<Unif
     tagline: "",
     colors: [],
     fonts: [],
-    logos: logo ? [logo] : [],
+    logos: logo ? [forceHttps(logo)] : [],
     personality: personality.join(", ") || undefined,
     tone: input.additionalContext?.tone,
     targetAudience: input.additionalContext?.audience,
