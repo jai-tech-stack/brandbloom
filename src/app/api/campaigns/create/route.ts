@@ -59,12 +59,20 @@ function buildAssetPrompt(
   },
   assetLabel: string,
   assetType: string,
-  platform: string
+  platform: string,
+  extra?: {
+    purpose?: string | null;
+    visualDirection?: string | null;
+    cta?: string | null;
+  }
 ): string {
   const parts: string[] = [];
   parts.push(`${assetType.replace(/_/g, " ")} for ${platform}`);
   parts.push(assetLabel);
   if (brand.name) parts.push(`brand: ${brand.name}`);
+  if (extra?.purpose) parts.push(`purpose: ${extra.purpose}`);
+  if (extra?.visualDirection) parts.push(`visual direction: ${extra.visualDirection}`);
+  if (extra?.cta) parts.push(`cta: ${extra.cta}`);
   if (brand.colors.length) {
     parts.push(`brand colors: ${brand.colors.slice(0, 4).join(", ")}`);
   }
@@ -76,9 +84,13 @@ function buildAssetPrompt(
     const mood = [brand.tone, brand.personality].filter(Boolean).join(", ");
     parts.push(`mood: ${mood}`);
   }
+  if (brand.targetAudience) parts.push(`target audience: ${brand.targetAudience}`);
   if (brand.description) parts.push(brand.description.split(".")[0]);
   if (brand.tagline) parts.push(`tagline: "${brand.tagline}"`);
-  parts.push("professional commercial design, polished, high quality, campaign-grade composition, brand-consistent");
+  parts.push(
+    "professional commercial design, polished, high quality, campaign-grade composition, brand-consistent",
+    "no text overlays unless explicitly requested"
+  );
   return parts.join(". ");
 }
 
@@ -223,7 +235,7 @@ export async function POST(request: NextRequest) {
     for (const asset of campaign.assets) {
       await prisma.asset.update({ where: { id: asset.id }, data: { status: "generating" } });
 
-      let assetPlan: { assetType?: string; platform?: string; headlineConcept?: string } = {};
+      let assetPlan: { assetType?: string; platform?: string; headlineConcept?: string; visualDirection?: string; purpose?: string; cta?: string } = {};
       try {
         assetPlan = asset.blueprint ? (JSON.parse(asset.blueprint) as typeof assetPlan) : {};
       } catch { /* ignore */ }
@@ -232,7 +244,11 @@ export async function POST(request: NextRequest) {
       const platform = assetPlan.platform ?? "Multi-platform";
       const conceptLabel = assetPlan.headlineConcept ?? asset.label;
 
-      const prompt = buildAssetPrompt(brandForGeneration, conceptLabel, assetType, platform);
+      const prompt = buildAssetPrompt(brandForGeneration, conceptLabel, assetType, platform, {
+        purpose: assetPlan.purpose ?? null,
+        visualDirection: assetPlan.visualDirection ?? null,
+        cta: assetPlan.cta ?? null,
+      });
       const aspectRatio = platformToAspectRatio(platform);
 
       let imageUrl: string | null = null;

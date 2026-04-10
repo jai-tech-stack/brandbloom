@@ -5,4 +5,4 @@ httpx>=0.27.0
 beautifulsoup4>=4.12.0
 python-dotenv>=1.0.0
 pydantic>=2.6.0
-# Optional: emergentintegrations (install from private source if using backend /api/generate-image)
+# No optional image backend required; image generation uses Replicate.

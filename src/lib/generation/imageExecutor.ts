@@ -49,19 +49,5 @@ export async function executeImageGeneration(
     }
   }
 
-  // Fallback: optional Emergent backend
-  try {
-    const res = await fetch("http://localhost:8001/api/generate-image", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: finalPrompt, session_id: sessionId }),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { success?: boolean; image_url?: string };
-    if (data.success && data.image_url) return data.image_url;
-  } catch {
-    // Backend not running
-  }
-
   return null;
 }

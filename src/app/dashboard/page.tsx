@@ -7,6 +7,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Header } from "@/components/Header";
 import { BrandKitDownload } from "@/components/BrandKitDownload";
+import { AssetVariations } from "@/components/AssetVariations";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -94,110 +95,6 @@ const SIZE_OPTIONS = [
 ];
 
 // ─── Platform variant sizes ───────────────────────────────────────────────────
-
-const VARIANT_PLATFORMS = [
-  { label: "IG Post", aspectRatio: "1:1", size: "1024×1024" },
-  { label: "IG Story", aspectRatio: "9:16", size: "1024×1344" },
-  { label: "Banner", aspectRatio: "16:9", size: "1344×768" },
-  { label: "LinkedIn", aspectRatio: "21:9", size: "1536×640" },
-  { label: "Pinterest", aspectRatio: "2:3", size: "1024×1536" },
-];
-
-// ─── Variant Modal ────────────────────────────────────────────────────────────
-
-function VariantModal({ asset, onClose, onVariantCreated }: {
-  asset: Asset;
-  onClose: () => void;
-  onVariantCreated: (a: Asset) => void;
-}) {
-  const [generating, setGenerating] = useState<string | null>(null);
-  const [error, setError] = useState("");
-
-  async function generate(aspectRatio: string) {
-    if (!asset.brand?.id || generating) return;
-    setError("");
-    setGenerating(aspectRatio);
-    try {
-      const res = await fetch("/api/generate-assets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          brandId: asset.brand.id,
-          promptOverride: asset.prompt || asset.label,
-          aspectRatio,
-          quality: "4k",
-          premiumIdeas: true,
-          limit: 1,
-        }),
-        credentials: "include",
-      });
-      const data = await res.json().catch(() => ({})) as { assets?: Asset[]; asset?: Asset; error?: string };
-      if (!res.ok || data.error) throw new Error(data.error ?? "Generation failed.");
-      const newAsset = data.assets?.[0] ?? data.asset;
-      if (newAsset) { onVariantCreated(newAsset); onClose(); }
-      else throw new Error("No asset returned.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
-      setGenerating(null);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-2xl border border-surface-600 bg-surface-800 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-white">Resize asset</h3>
-            <p className="text-xs text-stone-500 mt-0.5">Generate a variant at a different size</p>
-          </div>
-          <button type="button" onClick={onClose} className="text-stone-600 hover:text-white transition text-lg leading-none">×</button>
-        </div>
-
-        {/* Original asset preview */}
-        <div className="mb-4 flex items-center gap-3 rounded-xl bg-surface-700 p-3">
-          {asset.url && (
-            <img src={asset.url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
-          )}
-          <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-white">{asset.label}</p>
-            <p className="text-[10px] text-stone-500">{asset.width}×{asset.height} · original</p>
-          </div>
-        </div>
-
-        {/* Platform options */}
-        <div className="space-y-1.5">
-          {VARIANT_PLATFORMS.map((p) => {
-            const isGenerating = generating === p.aspectRatio;
-            return (
-              <button
-                key={p.aspectRatio}
-                type="button"
-                disabled={!!generating}
-                onClick={() => generate(p.aspectRatio)}
-                className="flex w-full items-center justify-between rounded-xl border border-surface-600 bg-surface-700/50 px-4 py-3 text-left transition hover:border-brand-500/50 hover:bg-surface-700 disabled:opacity-50"
-              >
-                <div>
-                  <p className="text-sm font-medium text-white">{p.label}</p>
-                  <p className="text-[10px] text-stone-500">{p.size} · {p.aspectRatio}</p>
-                </div>
-                {isGenerating ? (
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
-                ) : (
-                  <span className="text-xs text-stone-600">Generate →</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
-        <p className="mt-3 text-[10px] text-stone-600">Each variant costs 2 credits.</p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Brand Lock Modal ─────────────────────────────────────────────────────────
 
 function BrandLockModal({ brand, brandColors, onClose, onSaved }: {
   brand: Brand;
@@ -939,10 +836,13 @@ function DashboardContent() {
 
       {/* Modals */}
       {resizingAsset && (
-        <VariantModal
+        <AssetVariations
           asset={resizingAsset}
           onClose={() => setResizingAsset(null)}
-          onVariantCreated={(a) => { setAssets((prev) => [a, ...prev]); setResizingAsset(null); }}
+          onVariantsCreated={(items) => {
+            if (items.length > 0) setAssets((prev) => [...items, ...prev]);
+            setResizingAsset(null);
+          }}
         />
       )}
       {lockModalBrandId && (() => {
@@ -1096,3 +996,4 @@ export default function DashboardPage() {
     </Suspense>
   );
 }
+

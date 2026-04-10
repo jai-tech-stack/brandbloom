@@ -287,26 +287,6 @@ async function generateWithReplicate(
   }
 }
 
-// ─── 4. Gemini via Python server.py ──────────────────────────────────────────
-async function generateWithGemini(prompt: string): Promise<string | null> {
-  const imageUrl = process.env.PYTHON_IMAGE_URL;
-  if (!imageUrl) return null;
-  try {
-    const res = await fetch(`${imageUrl}/api/generate-image`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, session_id: `bb-${Date.now()}` }),
-      signal: AbortSignal.timeout(55_000),
-    });
-    if (!res.ok) return null;
-    const data = await res.json() as { success?: boolean; image_url?: string };
-    return data.success && data.image_url ? data.image_url : null;
-  } catch (e) {
-    console.warn("[generate-assets] Gemini failed:", (e as Error).message);
-    return null;
-  }
-}
-
 function getDemoImage(width: number, height: number, label: string): string {
   return `https://picsum.photos/seed/${encodeURIComponent(label)}/${width}/${height}`;
 }
@@ -425,10 +405,9 @@ export async function POST(request: NextRequest) {
     }
 
     const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
-    const hasGemini = !!process.env.PYTHON_IMAGE_URL;
 
     // ✅ FIXED: Check that at least one generation method is available
-    if (!hasReplicate && !hasGemini) {
+    if (!hasReplicate) {
       return NextResponse.json(
         {
           error: "Generation services not configured. Contact support or try again later.",
@@ -456,11 +435,6 @@ export async function POST(request: NextRequest) {
           imgWidth = result.width;
           imgHeight = result.height;
         }
-      }
-
-      // Fall back to Gemini via Python server.py
-      if (!imageUrl && hasGemini) {
-        imageUrl = await generateWithGemini(prompt);
       }
 
       if (imageUrl) {

@@ -6,13 +6,13 @@
 The `/api/generate-assets` route uses **Replicate** (FLUX 1.1 Pro) when `REPLICATE_API_TOKEN` (or `REPLICATE_API_KEY`) is set. That gives you **real premium AI-generated images** without running any Python image server.
 
 **Where it’s used:**
-- When you click to **generate assets** on the analyze page, the Next.js route calls `generateImageWithReplicate()` from `@/lib/ai-generator`.
-- If the token is **missing**, the route tries the optional Emergent backend at `http://localhost:8001`. If that also fails or isn’t running, it falls back to **demo mode**: placeholder images and `demo: true`.
+- When you click to **generate assets**, the Next.js route calls `generateImageWithReplicate()` from `@/lib/ai-generator`.
+- If the token is **missing**, generation is disabled (no fallback server).
 - The analyze page banner says: set **REPLICATE_API_TOKEN** for real AI images; optional **FREEPIK_API_KEY** and **ANTHROPIC_API_KEY** + **BACKEND_BLOOM_URL** for extraction.
 
 So:
-- **With `REPLICATE_API_TOKEN`:** Real AI images via Flux (no need to run `backend/server.py`).
-- **Without it:** Either run the Emergent image backend (8001) with `EMERGENT_LLM_KEY`, or you get demo mode (placeholders).
+- **With `REPLICATE_API_TOKEN`:** Real AI images via Flux.
+- **Without it:** Image generation is unavailable.
 
 **FREEPIK_API_KEY**  
 Optional. Reserved for future Freepik integration (e.g. stock asset search). Not required for current image generation.
@@ -25,4 +25,4 @@ Used by the **Brand BLOOM+ backend** (`backend/api/`) for **brand extraction** (
 ## Other keys (see `.env.example`)
 
 - **NEXTAUTH_*** — Auth for the main app.
-- **EMERGENT_LLM_KEY** — Optional. Only used if you run `backend/server.py` (port 8001) as a fallback image provider when Replicate is not configured.
+**EMERGENT_LLM_KEY** — Not used. (Image generation uses Replicate only.)
